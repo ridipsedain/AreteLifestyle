@@ -4,7 +4,7 @@
 
 ### AI-Powered Personal Coaching for the Next Generation
 
-*From the ancient Greek concept of excellence — reaching your full potential*
+*From the ancient Greek concept of excellence and reaching your full potential*
 
 <br/>
 
@@ -15,7 +15,7 @@
 
 <br/>
 
-**[Join the Waitlist →](your-landing-page-url)**
+**[Join the Waitlist →](Aretelifestyle.org)**
 
 </div>
 
@@ -25,7 +25,7 @@
 
 Most self-improvement apps are passive. They wait for you to show up.
 
-For 18–24 year olds juggling school, work, and the chaos of early adulthood — that's not enough. You open the app once, forget about it for two weeks, and feel guilty. Generic reminders don't help. What you need is something that actually *shows up for you*.
+For 18–24 year olds juggling school, work, and the chaos of early adulthood. That's not enough. You open the app once, forget about it for two weeks, and feel guilty. Generic reminders don't help. What you need is something that actually *shows up for you*.
 
 **Arete flips the model. The app comes to you.**
 
@@ -33,7 +33,7 @@ For 18–24 year olds juggling school, work, and the chaos of early adulthood �
 
 ## What Is Arete?
 
-Arete is an AI-powered personal coaching app that builds a real picture of your habits and patterns — then proactively reaches out with specific, personalized coaching interventions rather than generic nudges.
+Arete is an AI-powered personal coaching app that builds a real picture of your habits and patterns then proactively reaches out with specific, personalized coaching interventions rather than generic nudges.
 
 No "drink more water" notifications. Real coaching, based on *your* data.
 
