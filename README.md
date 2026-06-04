@@ -15,7 +15,7 @@
 
 <br/>
 
-**[Join the Waitlist →](Aretelifestyle.org)**
+**[Join the Waitlist →](https://www.Aretelifestyle.org)**
 
 </div>
 
@@ -120,7 +120,7 @@ Designed to live on your phone. Widgets, streak tracking, and smart push notific
 
 We're launching in **90 days**. Get early access and be the first to know.
 
-**→ [Sign up at your-landing-page-url](Aretelifestyle.org)**
+**→ [Sign up at your-landing-page-url](https://www.aretelifestyle.org)**
 
 ---
 
