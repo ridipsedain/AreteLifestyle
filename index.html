@@ -345,7 +345,21 @@
             position: relative; text-align: center; overflow: hidden;
             padding: 130px 6%;
         }
-        #greek-canvas { display: block; width: 100%; height: 420px; position: relative; z-index: 1; cursor: default; pointer-events: auto; }
+        #greek-canvas { display: block; width: 100%; height: 520px; position: relative; z-index: 1; cursor: grab; pointer-events: auto; border-radius: 16px; }
+        #greek-canvas:active { cursor: grabbing; }
+        .origin-cam-controls {
+            position: absolute; bottom: 16px; right: 16px; z-index: 3;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .origin-cam-btn {
+            width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+            background: rgba(7,7,14,.75); border: 1px solid rgba(201,168,76,.35);
+            color: var(--gold); font-size: 20px; font-weight: 300; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: all .2s ease; font-family: 'Inter', sans-serif;
+            backdrop-filter: blur(8px);
+        }
+        .origin-cam-btn:hover { background: rgba(201,168,76,.18); border-color: var(--gold); }
         #origin .s-inner { position: relative; z-index: 1; }
         #origin .s-label { color: var(--gold); }
         .origin-eyebrow {
@@ -381,7 +395,7 @@
         .origin-constellation { margin-top: 56px; position: relative; }
         /* Zoom overlay — sits on top of canvas when a star is clicked */
         .origin-zoom-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 420px;
+            position: absolute; top: 0; left: 0; width: 100%; height: 520px;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             opacity: 0; pointer-events: none;
             transition: opacity .55s ease;
@@ -1022,7 +1036,11 @@
                     <div class="ozoom-greek"  id="ozoom-greek"></div>
                     <div class="ozoom-en"     id="ozoom-en"></div>
                     <div class="ozoom-desc"   id="ozoom-desc"></div>
-                    <button class="ozoom-back" id="ozoom-back">← Back to Stars</button>
+                    <button class="ozoom-back" id="ozoom-back">← Back to Hercules</button>
+                </div>
+                <div class="origin-cam-controls">
+                    <button class="origin-cam-btn" id="origin-zoom-in">+</button>
+                    <button class="origin-cam-btn" id="origin-zoom-out">−</button>
                 </div>
             </div>
         </div>
@@ -1367,7 +1385,7 @@
 })();
 
 
-// ── ORIGIN INTERACTIVE CONSTELLATION ─────────────────────────────────
+// ── ORIGIN: HERCULES CONSTELLATION (pan · zoom · click) ───────────────
 (function () {
     const canvas  = document.getElementById('greek-canvas');
     if (!canvas) return;
@@ -1379,233 +1397,339 @@
     const oBack   = document.getElementById('ozoom-back');
     let W, H;
 
-    // ── Zoom state ──
-    let zoomed      = false;
-    let zoomedIdx   = -1;
-    let zScale      = 1,  zTargetScale = 1;
-    let zCx         = 0,  zCy          = 0;   // current camera center (natural coords)
-    let zTCx        = 0,  zTCy         = 0;   // target camera center
+    // ── Camera ──
+    // cam.x/y = natural-space center being viewed; cam.scale = zoom
+    const cam = { x:450, y:400, scale:0.72, tx:450, ty:400, ts:0.72 };
+    const MIN_SCALE = 0.38, MAX_SCALE = 3.2;
 
-    // ── 6 clickable main nodes + 6 organic connector nodes ──
+    // ── Star-click zoom state ──
+    let starZoomed = false, starIdx = -1;
+    let preCamX, preCamY, preCamS;   // saved camera before star-zoom
+
+    // ── HERCULES constellation ──
+    // Natural space: 900 × 780. Stars placed to resemble the actual Heracles
+    // constellation — associated with the 12 Labors, strength & excellence.
+    // Main nodes (0-5) are clickable; connector nodes (6-18) shape the figure.
     const mainNodes = [
-        { fx:0.13, fy:0.42, greek:'ἀρετή',       en:'Excellence',   desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
-        { fx:0.74, fy:0.22, greek:'εὐδαιμονία',  en:'Flourishing',  desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
-        { fx:0.52, fy:0.82, greek:'φρόνησις',    en:'Wisdom',       desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
-        { fx:0.86, fy:0.62, greek:'ἐγκράτεια',   en:'Self-Mastery', desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
-        { fx:0.30, fy:0.14, greek:'σωφροσύνη',   en:'Temperance',   desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
-        { fx:0.44, fy:0.54, greek:'εὐθυμία',     en:'Contentment',  desc:"The quiet peace of a well-lived day. Democritus called it the highest good — the calm that comes from knowing you gave your best." },
+        { x:450, y: 55, greek:'ἀρετή',      en:'Excellence',   desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
+        { x:832, y:122, greek:'εὐδαιμονία', en:'Flourishing',  desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
+        { x: 72, y:162, greek:'φρόνησις',   en:'Wisdom',       desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
+        { x:452, y:352, greek:'ἐγκράτεια',  en:'Self-Mastery', desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
+        { x:242, y:695, greek:'σωφροσύνη',  en:'Temperance',   desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
+        { x:668, y:672, greek:'εὐθυμία',    en:'Contentment',  desc:"The quiet peace of a well-lived day. Democritus called it the highest good — the calm that comes from knowing you gave your best." },
     ];
-    // Connector (non-clickable) nodes
+    // Connector (non-clickable) body nodes — shape of Hercules figure
     const connNodes = [
-        { fx:0.58, fy:0.10 },  // 6
-        { fx:0.63, fy:0.38 },  // 7
-        { fx:0.24, fy:0.68 },  // 8
-        { fx:0.06, fy:0.84 },  // 9
-        { fx:0.38, fy:0.94 },  // 10
-        { fx:0.78, fy:0.90 },  // 11
+        { x:440, y:138 },  //  6 neck
+        { x:318, y:192 },  //  7 left shoulder
+        { x:574, y:175 },  //  8 right shoulder
+        { x:194, y:260 },  //  9 left elbow
+        { x:690, y:240 },  // 10 right elbow
+        { x:375, y:285 },  // 11 keystone top-left
+        { x:532, y:268 },  // 12 keystone top-right
+        { x:365, y:422 },  // 13 keystone bottom-left
+        { x:528, y:405 },  // 14 keystone bottom-right
+        { x:348, y:492 },  // 15 left hip
+        { x:554, y:472 },  // 16 right hip
+        { x:298, y:582 },  // 17 left knee
+        { x:598, y:562 },  // 18 right knee
     ];
-    const allNodes = [...mainNodes, ...connNodes];  // 0-5 main, 6-11 conn
+    const all = [...mainNodes, ...connNodes];
 
-    // Organic hand-crafted edges
+    // Edges — Hercules figure skeleton
     const edges = [
-        [0,4],[4,6],[6,1],[1,7],[7,5],[5,0],[5,2],[5,3],
-        [2,8],[8,9],[9,10],[10,2],[2,11],[11,3],[1,3],
-        [0,8],[4,7],[7,3],[6,7],
+        [0,6],[6,7],[6,8],           // head → shoulders
+        [7,9],[9,2],                  // left arm
+        [8,10],[10,1],                // right arm
+        [7,11],[8,12],                // shoulders → keystone top
+        [11,12],                      // keystone top bar
+        [11,13],[12,14],              // keystone sides
+        [13,14],                      // keystone bottom bar
+        [13,15],[14,16],              // hips
+        [15,17],[16,18],              // knees
+        [17,4],[18,5],                // feet
     ];
 
+    // Ambient background stars (in natural 900×780 space)
     const ambient = [];
     function buildAmbient() {
         ambient.length = 0;
-        for (let i = 0; i < 45; i++) ambient.push({
-            fx: Math.random(), fy: Math.random(),
-            r:  Math.random() * 1.1 + 0.25,
-            op: Math.random() * 0.20 + 0.06,
+        for (let i = 0; i < 55; i++) ambient.push({
+            x: Math.random() * 900, y: Math.random() * 780,
+            r: Math.random() * 1.0 + 0.22,
+            op: Math.random() * 0.18 + 0.05,
             tw: Math.random() * Math.PI * 2,
         });
     }
 
+    // ── Utilities ──
     function resize() {
         W = canvas.width  = canvas.offsetWidth  || 800;
-        H = canvas.height = canvas.offsetHeight || 420;
-        // Reset camera center on resize
-        if (!zoomed) { zCx = W/2; zCy = H/2; zTCx = W/2; zTCy = H/2; }
+        H = canvas.height = canvas.offsetHeight || 520;
+        fitView();
     }
+    function fitView() {
+        if (starZoomed) return;
+        cam.tx = 450; cam.ty = 390;
+        cam.ts = Math.min(W / 960, H / 830) * 0.88;
+    }
+    function toScreen(nx, ny) {
+        return { x:(nx - cam.x)*cam.scale + W/2, y:(ny - cam.y)*cam.scale + H/2 };
+    }
+    function toNatural(sx, sy) {
+        return { x:(sx - W/2)/cam.scale + cam.x, y:(sy - H/2)/cam.scale + cam.y };
+    }
+    function dist(ax,ay,bx,by){ return Math.sqrt((ax-bx)**2+(ay-by)**2); }
 
-    function npos(n) { return { x: n.fx * W, y: n.fy * H }; }
-    function dist(ax,ay,bx,by) { return Math.sqrt((ax-bx)**2+(ay-by)**2); }
-
-    // ── Zoom in / out ──
-    function zoomIn(idx) {
-        if (zoomed) return;
-        zoomed      = true;
-        zoomedIdx   = idx;
-        zTargetScale = 3.8;
-        const p = npos(mainNodes[idx]);
-        zTCx = p.x; zTCy = p.y;
-        // Fill overlay content
+    // ── Star-click zoom ──
+    function zoomToStar(idx) {
+        if (starZoomed) return;
+        starZoomed = true; starIdx = idx;
+        preCamX = cam.tx; preCamY = cam.ty; preCamS = cam.ts;
+        cam.tx = mainNodes[idx].x;
+        cam.ty = mainNodes[idx].y;
+        cam.ts = Math.min(MAX_SCALE, cam.scale * 3.2);
         oGreek.textContent = mainNodes[idx].greek;
         oEn.textContent    = mainNodes[idx].en;
         oDesc.textContent  = mainNodes[idx].desc;
-        // Show overlay after zoom settles (~700ms)
-        setTimeout(() => overlay.classList.add('visible'), 680);
+        setTimeout(() => overlay.classList.add('visible'), 700);
     }
-
-    function zoomOut() {
-        zoomed       = false;
-        zoomedIdx    = -1;
-        zTargetScale = 1;
-        zTCx = W/2; zTCy = H/2;
+    function zoomOutStar() {
+        starZoomed = false; starIdx = -1;
         overlay.classList.remove('visible');
+        cam.tx = preCamX; cam.ty = preCamY; cam.ts = preCamS;
     }
+    oBack.addEventListener('click', zoomOutStar);
 
-    oBack.addEventListener('click', zoomOut);
+    // ── Pan with drag ──
+    const drag = { on:false, sx:0, sy:0, ox:0, oy:0 };
+    canvas.addEventListener('mousedown', e => {
+        if (starZoomed) return;
+        drag.on = true; drag.sx = e.clientX; drag.sy = e.clientY;
+        drag.ox = cam.tx; drag.oy = cam.ty;
+        canvas.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', e => {
+        if (!drag.on) return;
+        const dx = (e.clientX - drag.sx) / cam.scale;
+        const dy = (e.clientY - drag.sy) / cam.scale;
+        cam.tx = drag.ox - dx; cam.ty = drag.oy - dy;
+    });
+    window.addEventListener('mouseup', () => {
+        if (!drag.on) return;
+        drag.on = false;
+        canvas.style.cursor = starZoomed ? 'default' : 'grab';
+    });
 
-    // Canvas click
+    // Touch pan
+    let touch0 = null;
+    canvas.addEventListener('touchstart', e => {
+        if (starZoomed || e.touches.length !== 1) return;
+        touch0 = { x:e.touches[0].clientX, y:e.touches[0].clientY, ox:cam.tx, oy:cam.ty };
+    }, { passive:true });
+    canvas.addEventListener('touchmove', e => {
+        if (!touch0 || e.touches.length !== 1) return;
+        const dx = (e.touches[0].clientX - touch0.x) / cam.scale;
+        const dy = (e.touches[0].clientY - touch0.y) / cam.scale;
+        cam.tx = touch0.ox - dx; cam.ty = touch0.oy - dy;
+    }, { passive:true });
+    canvas.addEventListener('touchend', () => { touch0 = null; });
+
+    // ── Scroll to zoom ──
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.91;
+        cam.ts = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.ts * factor));
+    }, { passive:false });
+
+    // +/- buttons
+    document.getElementById('origin-zoom-in') ?.addEventListener('click', () => {
+        cam.ts = Math.min(MAX_SCALE, cam.ts * 1.25);
+    });
+    document.getElementById('origin-zoom-out')?.addEventListener('click', () => {
+        cam.ts = Math.max(MIN_SCALE, cam.ts * 0.8);
+    });
+
+    // ── Click on canvas (select star) ──
+    let mouseMovedSince = false;
+    canvas.addEventListener('mousedown', () => { mouseMovedSince = false; });
+    window.addEventListener('mousemove', () => { if (drag.on) mouseMovedSince = true; });
     canvas.addEventListener('click', e => {
-        if (zoomed) return;
+        if (starZoomed || mouseMovedSince) return;
         const rect = canvas.getBoundingClientRect();
-        const cx = (e.clientX - rect.left) * (W / rect.width);
-        const cy = (e.clientY - rect.top)  * (H / rect.height);
-        // Transform click to natural coords
-        const nx = (cx - W/2) / zScale + zCx;
-        const ny = (cy - H/2) / zScale + zCy;
-        mainNodes.forEach((n, i) => {
-            const p = npos(n);
-            if (dist(nx, ny, p.x, p.y) < 28) zoomIn(i);
+        const n = toNatural(
+            (e.clientX - rect.left) * (W / rect.width),
+            (e.clientY - rect.top)  * (H / rect.height)
+        );
+        let hit = -1, bestD = 30 / cam.scale;
+        mainNodes.forEach((mn, i) => {
+            const d = dist(n.x, n.y, mn.x, mn.y);
+            if (d < bestD) { bestD = d; hit = i; }
         });
-    });
-    canvas.addEventListener('mousemove', e => {
-        if (zoomed) return;
-        const rect = canvas.getBoundingClientRect();
-        const cx = (e.clientX - rect.left) * (W / rect.width);
-        const cy = (e.clientY - rect.top)  * (H / rect.height);
-        const nx = (cx - W/2) / zScale + zCx;
-        const ny = (cy - H/2) / zScale + zCy;
-        const hit = mainNodes.some(n => { const p = npos(n); return dist(nx,ny,p.x,p.y) < 28; });
-        canvas.style.cursor = hit ? 'pointer' : 'default';
+        if (hit >= 0) zoomToStar(hit);
     });
 
-    // Draw a 4-pointed sparkle
+    // Hover cursor
+    canvas.addEventListener('mousemove', e => {
+        if (drag.on || starZoomed) return;
+        const rect = canvas.getBoundingClientRect();
+        const n = toNatural(
+            (e.clientX - rect.left) * (W / rect.width),
+            (e.clientY - rect.top)  * (H / rect.height)
+        );
+        const hit = mainNodes.some(mn => dist(n.x,n.y,mn.x,mn.y) < 30/cam.scale);
+        canvas.style.cursor = hit ? 'pointer' : 'grab';
+    });
+
+    // ── Draw ──
     function drawSparkle(x, y, r, color) {
         ctx.save(); ctx.translate(x, y); ctx.fillStyle = color;
         for (let a = 0; a < 4; a++) {
             ctx.rotate(Math.PI / 2);
             ctx.beginPath();
-            ctx.moveTo(0, -r*3.0);
-            ctx.quadraticCurveTo(r*0.28, -r*0.28, 0, 0);
-            ctx.quadraticCurveTo(-r*0.28, -r*0.28, 0, -r*3.0);
+            ctx.moveTo(0, -r*3.2);
+            ctx.quadraticCurveTo(r*0.28,-r*0.28, 0,0);
+            ctx.quadraticCurveTo(-r*0.28,-r*0.28, 0,-r*3.2);
             ctx.fill();
         }
         ctx.restore();
     }
 
-    let frame = 0;
+    let frame = 0, hoveredIdx = -1;
+    // Track hover for glow highlight
+    canvas.addEventListener('mousemove', e => {
+        if (drag.on || starZoomed) { hoveredIdx = -1; return; }
+        const rect = canvas.getBoundingClientRect();
+        const n = toNatural((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
+        let best = -1, bestD = 34/cam.scale;
+        mainNodes.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<bestD){bestD=d;best=i;} });
+        hoveredIdx = best;
+    });
+
     function draw() {
         requestAnimationFrame(draw);
         frame++;
         const now = frame * 0.016;
 
-        // Lerp zoom
-        const lerpK = 0.07;
-        zScale += (zTargetScale - zScale) * lerpK;
-        zCx    += (zTCx - zCx) * lerpK;
-        zCy    += (zTCy - zCy) * lerpK;
+        // Lerp camera
+        const k = 0.072;
+        cam.scale += (cam.ts - cam.scale) * k;
+        cam.x     += (cam.tx - cam.x)     * k;
+        cam.y     += (cam.ty - cam.y)     * k;
 
-        ctx.clearRect(0, 0, W, H);
+        ctx.clearRect(0,0,W,H);
+
+        // Clip to canvas bounds
         ctx.save();
-        // Apply zoom transform: center on zCx,zCy
-        ctx.translate(W/2, H/2);
-        ctx.scale(zScale, zScale);
-        ctx.translate(-zCx, -zCy);
+        ctx.rect(0,0,W,H); ctx.clip();
 
-        // ── Edges ──
-        for (const [i, j] of edges) {
-            const a = npos(allNodes[i]), b = npos(allNodes[j]);
-            const mi = i < 6 ? i : -1, mj = j < 6 ? j : -1;
-            const lit = (zoomed && (mi === zoomedIdx || mj === zoomedIdx)) ||
-                        (!zoomed && (mi !== -1 || mj !== -1));
-            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = lit ? 'rgba(201,168,76,0.40)' : 'rgba(201,168,76,0.11)';
-            ctx.lineWidth   = lit ? 1.0 : 0.55;
-            ctx.stroke();
-        }
+        // Apply camera transform
+        ctx.save();
+        ctx.translate(W/2, H/2);
+        ctx.scale(cam.scale, cam.scale);
+        ctx.translate(-cam.x, -cam.y);
 
         // ── Ambient stars ──
         for (const s of ambient) {
-            const tw = 0.8 + 0.2 * Math.sin(now + s.tw);
-            ctx.beginPath(); ctx.arc(s.fx*W, s.fy*H, s.r, 0, Math.PI*2);
+            const tw = 0.82 + 0.18 * Math.sin(now + s.tw);
+            const p  = toScreen(s.x, s.y);
+            ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
             ctx.fillStyle = `rgba(201,168,76,${s.op*tw})`; ctx.fill();
         }
 
-        // ── Connector nodes ──
-        for (let i = 6; i < allNodes.length; i++) {
-            const p = npos(allNodes[i]);
-            const lit = edges.some(([a,b]) => (a===i||b===i) && (a===zoomedIdx||b===zoomedIdx));
-            drawSparkle(p.x, p.y, lit ? 2.8 : 1.8, lit ? 'rgba(215,172,65,0.70)' : 'rgba(201,168,76,0.28)');
-            ctx.beginPath(); ctx.arc(p.x, p.y, lit ? 1.2 : 0.8, 0, Math.PI*2);
-            ctx.fillStyle = lit ? 'rgba(255,230,130,0.9)' : 'rgba(220,180,80,0.45)'; ctx.fill();
+        // ── Constellation edges ──
+        for (const [i,j] of edges) {
+            const a = all[i], b = all[j];
+            const mi = i<6?i:-1, mj = j<6?j:-1;
+            const lit = (starZoomed && (mi===starIdx||mj===starIdx)) ||
+                        (!starZoomed && (hoveredIdx>=0) && (mi===hoveredIdx||mj===hoveredIdx));
+            ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+            ctx.strokeStyle = lit ? 'rgba(201,168,76,0.55)' : 'rgba(201,168,76,0.22)';
+            ctx.lineWidth   = lit ? 1.2 / cam.scale : 0.7 / cam.scale;
+            ctx.stroke();
         }
 
-        // ── Main star nodes ──
-        const labelAligns = [
-            { dx:-16, dy:-30, ta:'right'  },  // Excellence
-            { dx: 16, dy:-30, ta:'left'   },  // Flourishing
-            { dx: 16, dy: 32, ta:'left'   },  // Wisdom
-            { dx: 16, dy: 32, ta:'left'   },  // Self-Mastery
-            { dx:-16, dy:-30, ta:'right'  },  // Temperance
-            { dx: 16, dy: 32, ta:'left'   },  // Contentment
+        // ── Connector nodes ──
+        for (let i=6; i<all.length; i++) {
+            const n = all[i];
+            const lit = edges.some(([a,b])=>(a===i||b===i)&&((starZoomed&&(a===starIdx||b===starIdx))||(hoveredIdx>=0&&(a===hoveredIdx||b===hoveredIdx))));
+            drawSparkle(n.x, n.y, lit ? 2.4 : 1.6, lit ? 'rgba(215,172,65,0.65)' : 'rgba(201,168,76,0.25)');
+            ctx.beginPath(); ctx.arc(n.x,n.y, lit?1.1:0.75, 0,Math.PI*2);
+            ctx.fillStyle = lit ? 'rgba(255,230,130,0.85)' : 'rgba(220,180,80,0.42)'; ctx.fill();
+        }
+
+        // ── Main clickable star nodes ──
+        const labelOf = [
+            {dx:-14,dy:-28,ta:'right'},   // 0 Excellence
+            {dx: 14,dy:-28,ta:'left' },   // 1 Flourishing
+            {dx: 14,dy: 28,ta:'left' },   // 2 Wisdom
+            {dx: 14,dy: 28,ta:'left' },   // 3 Self-Mastery
+            {dx:-14,dy:-28,ta:'right'},   // 4 Temperance
+            {dx: 14,dy: 28,ta:'left' },   // 5 Contentment
         ];
-        for (let i = 0; i < mainNodes.length; i++) {
-            const n = mainNodes[i], p = npos(n);
-            const isZoomed = zoomed && i === zoomedIdx;
-            const pulse    = isZoomed ? (0.88 + 0.12 * Math.sin(now * 2.2)) : 1;
+        for (let i=0; i<mainNodes.length; i++) {
+            const n = mainNodes[i];
+            const isStar = starZoomed && i === starIdx;
+            const isHov  = !starZoomed && i === hoveredIdx;
+            const pulse  = (isStar||isHov) ? (0.86 + 0.14*Math.sin(now*2.4)) : (0.92 + 0.08*Math.sin(now*1.2 + i));
 
             // Glow
-            const glowR = isZoomed ? 60 * pulse : 30;
-            const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
-            grd.addColorStop(0,    `rgba(201,168,76,${isZoomed ? 0.32 : 0.10})`);
-            grd.addColorStop(0.5,  `rgba(201,168,76,${isZoomed ? 0.08 : 0.02})`);
-            grd.addColorStop(1,    'rgba(201,168,76,0)');
-            ctx.beginPath(); ctx.arc(p.x, p.y, glowR, 0, Math.PI*2);
-            ctx.fillStyle = grd; ctx.fill();
+            const glowR = isStar ? 58*pulse : isHov ? 40*pulse : 22;
+            const grd = ctx.createRadialGradient(n.x,n.y,0, n.x,n.y,glowR);
+            grd.addColorStop(0,   `rgba(201,168,76,${isStar?.30:isHov?.22:.08})`);
+            grd.addColorStop(0.5, `rgba(201,168,76,${isStar?.07:isHov?.05:.01})`);
+            grd.addColorStop(1,   'rgba(201,168,76,0)');
+            ctx.beginPath(); ctx.arc(n.x,n.y,glowR,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
 
-            // Ring
-            ctx.beginPath(); ctx.arc(p.x, p.y, isZoomed ? 20*pulse : 13, 0, Math.PI*2);
-            ctx.strokeStyle = isZoomed ? 'rgba(201,168,76,0.90)' : 'rgba(201,168,76,0.32)';
-            ctx.lineWidth = isZoomed ? 1.5 : 0.9; ctx.stroke();
+            // Outer ring
+            ctx.beginPath(); ctx.arc(n.x,n.y, isStar?20*pulse:isHov?15:11, 0,Math.PI*2);
+            ctx.strokeStyle = isStar?'rgba(201,168,76,.90)':isHov?'rgba(201,168,76,.70)':'rgba(201,168,76,.35)';
+            ctx.lineWidth = (isStar?1.5:isHov?1.2:0.8) / cam.scale * cam.scale;
+            ctx.lineWidth = isStar?1.5:isHov?1.2:0.8;
+            ctx.stroke();
 
-            // Second halo on zoomed
-            if (isZoomed) {
-                ctx.beginPath(); ctx.arc(p.x, p.y, 28*pulse, 0, Math.PI*2);
-                ctx.strokeStyle = 'rgba(201,168,76,0.14)'; ctx.lineWidth = 0.7; ctx.stroke();
+            // Halo (star-zoomed)
+            if (isStar) {
+                ctx.beginPath(); ctx.arc(n.x,n.y,28*pulse,0,Math.PI*2);
+                ctx.strokeStyle='rgba(201,168,76,0.13)'; ctx.lineWidth=0.7; ctx.stroke();
             }
 
             // Sparkle
-            drawSparkle(p.x, p.y,
-                isZoomed ? 7*pulse : 4.0,
-                isZoomed ? 'rgba(235,190,80,0.97)' : 'rgba(201,168,76,0.52)');
+            drawSparkle(n.x, n.y,
+                isStar?7*pulse:isHov?5.5*pulse:3.8*pulse,
+                isStar?'rgba(235,190,80,.97)':isHov?'rgba(220,178,70,.85)':'rgba(201,168,76,.55)');
 
             // Core
-            ctx.beginPath(); ctx.arc(p.x, p.y, isZoomed ? 3.2*pulse : 2.0, 0, Math.PI*2);
-            ctx.fillStyle = isZoomed ? 'rgba(255,242,165,1)' : 'rgba(230,185,75,0.68)'; ctx.fill();
+            ctx.beginPath(); ctx.arc(n.x,n.y, isStar?3.2*pulse:isHov?2.4:1.9, 0,Math.PI*2);
+            ctx.fillStyle = isStar?'rgba(255,242,165,1)':isHov?'rgba(250,225,130,1)':'rgba(230,185,75,.72)'; ctx.fill();
 
-            // Label (hidden when fully zoomed in so overlay takes over)
-            if (zScale < 2.8) {
-                const lo = labelAligns[i];
-                const alpha = Math.max(0, Math.min(1, (2.8 - zScale) / 1.5));
-                ctx.font = `${isZoomed?'600':'400'} 10px Inter,sans-serif`;
-                ctx.fillStyle = `rgba(201,168,76,${(isZoomed ? 0.95 : 0.38) * alpha})`;
+            // Label — fade out when deeply zoomed in (overlay takes over)
+            const labelAlpha = Math.max(0, Math.min(1, (2.4 - cam.scale)/1.2));
+            if (labelAlpha > 0.02) {
+                const lo = labelOf[i];
+                ctx.font      = `${isHov||isStar?'600':'400'} ${Math.round(10/cam.scale*Math.min(cam.scale,1.2))}px Inter,sans-serif`;
+                ctx.fillStyle = `rgba(201,168,76,${(isStar?.88:isHov?.72:.42)*labelAlpha})`;
                 ctx.textAlign = lo.ta;
-                ctx.fillText(`${n.greek} · ${n.en}`, p.x + lo.dx, p.y + lo.dy);
+                // Label above head or below feet; sides for others
+                ctx.fillText(`${n.greek} · ${n.en}`, n.x+lo.dx, n.y+lo.dy);
             }
         }
 
-        ctx.restore();
+        ctx.restore(); // camera transform
+
+        // ── Canvas-space UI: hint text ──
+        if (!starZoomed && cam.scale < 1.8) {
+            const alpha = Math.min(1, (1.8 - cam.scale) / 0.6);
+            ctx.font = `400 11px Inter,sans-serif`;
+            ctx.fillStyle = `rgba(201,168,76,${0.38 * alpha})`;
+            ctx.textAlign = 'center';
+            ctx.fillText('HERCULES · Drag to explore  ·  Click a golden star', W/2, H - 16);
+        }
+
+        ctx.restore(); // clip
     }
 
     resize();
-    // Init camera center
-    zCx = W/2; zCy = H/2; zTCx = W/2; zTCy = H/2;
     buildAmbient();
     draw();
     window.addEventListener('resize', () => { resize(); buildAmbient(); });
@@ -2012,6 +2136,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
