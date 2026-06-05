@@ -346,12 +346,7 @@
             padding: 130px 6% 80px; min-height: 1150px;
         }
         /* Canvas fills the ENTIRE section */
-        #greek-canvas {
-            position: absolute; inset: 0;
-            width: 100%; height: 100%;
-            display: block; z-index: 0;
-            pointer-events: none;
-        }
+        #greek-canvas { position: absolute; left: 0; right: 0; display: block; z-index: 0; pointer-events: auto; }
         .origin-cam-controls { display:none; }
         .origin-cam-btn {
             width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
@@ -1401,7 +1396,7 @@
     let W, H;
 
     // Camera — only moves when a star is clicked; otherwise static
-    const cam = { cx:.5, cy:.5, scale:1.55, tcx:.5, tcy:.5, ts:1.55 };
+    const cam = { cx:.5, cy:.5, scale:.88, tcx:.5, tcy:.5, ts:.88 };
     const MAX_S = 4.0;
     let starZoomed=false, starIdx=-1, preCx, preCy, preS;
 
@@ -1465,7 +1460,8 @@
         if(body){
             const top = body.offsetTop + body.offsetHeight + 32;
             canvas.style.top    = top + 'px';
-            canvas.style.height = Math.max(380, section.offsetHeight - top - 20) + 'px';
+            canvas.style.bottom = '0';
+            canvas.style.height = Math.max(400, section.offsetHeight - top - 20) + 'px';
         }
         W = canvas.offsetWidth  || 900;
         H = canvas.offsetHeight || 520;
@@ -1484,7 +1480,7 @@
         preCx=cam.tcx; preCy=cam.tcy; preS=cam.ts;
         cam.tcx=mainNodes[idx].fx;
         cam.tcy=mainNodes[idx].fy;
-        cam.ts=Math.min(MAX_S, cam.scale*3.4);
+        cam.ts = Math.min(MAX_S, Math.max(cam.scale,.7)*3.4);
         oGreek.textContent=mainNodes[idx].greek;
         oEn.textContent   =mainNodes[idx].en;
         oDesc.textContent =mainNodes[idx].desc;
