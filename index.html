@@ -343,7 +343,7 @@
         #origin {
             background: #07070E;
             position: relative; text-align: center; overflow: hidden;
-            padding: 130px 6% 80px; min-height: 960px;
+            padding: 130px 6% 80px; min-height: 1150px;
         }
         /* Canvas fills the ENTIRE section */
         #greek-canvas {
@@ -1461,8 +1461,8 @@
         H=canvas.height=section.offsetHeight||960;
         if(!starZoomed){
             cam.tcx=.5; cam.tcy=.5;
-            // Start slightly zoomed out so the full pattern fills the canvas beautifully
-            cam.ts = Math.min(W/520, H/520) * 0.78;
+            // Zoomed in so constellation spans ~1.7x the canvas — requires dragging to explore
+            cam.ts = 1.7;
         }
     }
     function toScreen(fx,fy){return{x:(fx-cam.cx)*cam.scale*W+W/2,y:(fy-cam.cy)*cam.scale*H+H/2};}
@@ -1613,15 +1613,15 @@
             const n=mainNodes[i],p=toScreen(n.fx,n.fy);
             const isStar=starZoomed&&i===starIdx,isHov=!starZoomed&&i===hovIdx;
             const pulse=(isStar||isHov)?(.84+.16*Math.sin(now*2.4)):(.9+.1*Math.sin(now*.8+i*1.3));
-            drawStar(p.x,p.y,isStar?8*pulse:isHov?6.5*pulse:4.5*pulse,isStar?1:isHov?.90:.70);
+            drawStar(p.x,p.y,isStar?11*pulse:isHov?9*pulse:6.5*pulse,isStar?1:isHov?.90:.70);
             if(isStar){
                 ctx.beginPath();ctx.arc(p.x,p.y,24*pulse,0,Math.PI*2);ctx.strokeStyle='rgba(201,168,76,.20)';ctx.lineWidth=.8;ctx.stroke();
                 ctx.beginPath();ctx.arc(p.x,p.y,38*pulse,0,Math.PI*2);ctx.strokeStyle='rgba(201,168,76,.09)';ctx.lineWidth=.6;ctx.stroke();
             }
         }
 
-        if(!starZoomed&&cam.scale<0.95){
-            const a=Math.min(1,(0.95-cam.scale)/0.3);
+        if(!starZoomed){
+            const a=0.42;
             ctx.font='400 11px Inter,sans-serif';ctx.fillStyle=`rgba(201,168,76,${.40*a})`;
             ctx.textAlign='center';
             ctx.fillText(`${P.name.toUpperCase()}  ·  drag to explore  ·  click a star ✦`,W/2,H-14);
