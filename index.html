@@ -28,6 +28,32 @@
         html { scroll-behavior: smooth; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
 
+        /* ── ROTATING QUOTE ── */
+        .hero-quote-banner {
+            grid-column: 1 / -1;
+            position: relative; height: 90px; overflow: hidden;
+            margin-bottom: 48px; text-align: center;
+        }
+        .hero-quote-slide {
+            position: absolute; width: 100%;
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(26px, 3vw, 46px);
+            font-style: italic; font-weight: 700;
+            line-height: 1.15;
+            background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold) 45%, var(--gold-light) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+            opacity: 0; transform: translateY(22px);
+            transition: opacity .7s ease, transform .7s ease;
+        }
+        .hero-quote-slide .q-attr {
+            display: block; font-size: 13px; font-style: normal;
+            font-family: 'Inter', sans-serif;
+            background: none; -webkit-text-fill-color: var(--gold-dark);
+            letter-spacing: 1.5px; font-weight: 600; margin-top: 8px; text-transform: uppercase;
+        }
+        .hero-quote-slide.active { opacity: 1; transform: translateY(0); }
+        .hero-quote-slide.exit   { opacity: 0; transform: translateY(-22px); }
+
         /* ── NAV ── */
         nav {
             position: fixed; top: 0; width: 100%; z-index: 100;
@@ -614,6 +640,13 @@
 <section id="hero">
     <canvas id="three-canvas"></canvas>
     <div class="hero-inner">
+        <div class="hero-quote-banner" id="quote-wrap">
+            <div class="hero-quote-slide active">"Excellence is not an act, but a habit."<span class="q-attr">— Aristotle</span></div>
+            <div class="hero-quote-slide">"We are what we repeatedly do."<span class="q-attr">— Aristotle</span></div>
+            <div class="hero-quote-slide">"Small daily improvements lead to staggering long-term results."<span class="q-attr">— Robin Sharma</span></div>
+            <div class="hero-quote-slide">"Discipline is the bridge between goals and accomplishment."<span class="q-attr">— Jim Rohn</span></div>
+            <div class="hero-quote-slide">"The secret of getting ahead is getting started."<span class="q-attr">— Mark Twain</span></div>
+        </div>
         <div class="hero-text">
             <div class="hero-badge">
                 <span class="badge-dot"></span>
@@ -1638,6 +1671,21 @@ function copyRef(inputId, btn) {
 window.addEventListener('scroll', () => {
     document.getElementById('nav').style.boxShadow = window.scrollY > 40 ? '0 4px 28px rgba(0,0,0,.07)' : 'none';
 });
+
+// Rotating quotes
+(function() {
+    const slides = document.querySelectorAll('.hero-quote-slide');
+    let current = 0;
+    setInterval(() => {
+        slides[current].classList.remove('active');
+        slides[current].classList.add('exit');
+        const prev = current;
+        current = (current + 1) % slides.length;
+        slides[current].classList.add('active');
+        setTimeout(() => slides[prev].classList.remove('exit'), 700);
+    }, 4000);
+})();
 </script>
 </body>
 </html>
+
