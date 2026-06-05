@@ -1382,7 +1382,7 @@
 })();
 
 
-// ── ORIGIN: STATIC CONSTELLATION ─────────────────────────────────────
+// ── ORIGIN: INTERACTIVE CONSTELLATION ────────────────────────────────
 (function () {
     const canvas  = document.getElementById('greek-canvas');
     if (!canvas) return;
@@ -1393,27 +1393,30 @@
     const oEn     = document.getElementById('ozoom-en');
     const oDesc   = document.getElementById('ozoom-desc');
     const oBack   = document.getElementById('ozoom-back');
-    let W, H;
+    let W = 900, H = 520;
 
-    // Camera — only moves when a star is clicked; otherwise static
-    const cam = { cx:.5, cy:.5, scale:.88, tcx:.5, tcy:.5, ts:.88 };
-    const MAX_S = 4.0;
-    let starZoomed=false, starIdx=-1, preCx, preCy, preS;
+    /* Camera */
+    const cam = { cx:.5, cy:.5, scale:.9, tcx:.5, tcy:.5, ts:.9 };
+    let starZoomed = false, starIdx = -1, preCx, preCy, preS;
 
-    // Per-node hover animation progress (0=idle, 1=fully hovered)
+    /* Per-node hover progress */
     const hovAnim = new Array(9).fill(0);
     let hovIdx = -1;
 
+    /* Drag state */
+    let isDragging = false, didDrag = false;
+    let dragX = 0, dragY = 0, camStartCx = 0, camStartCy = 0;
+
     const VIRTUES = [
-        { greek:'ἀρετή',         en:'Excellence',        desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds.' },
-        { greek:'εὐδαιμονία',    en:'Flourishing',       desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned.' },
-        { greek:'φρόνησις',      en:'Wisdom',            desc:'Practical wisdom. Knowing what to do and when — transforming knowledge into right action.' },
-        { greek:'ἐγκράτεια',     en:'Self-Mastery',      desc:'The discipline to act by your values, not your impulses. The foundation of all freedom.' },
-        { greek:'σωφροσύνη',     en:'Temperance',        desc:'Balance in all things. Right proportion — knowing when enough is exactly enough.' },
-        { greek:'εὐθυμία',       en:'Contentment',       desc:'The calm that comes from knowing you gave your best — not despite effort, because of it.' },
-        { greek:'ἀνδρεία',       en:'Courage',           desc:'The willingness to act in spite of fear. Without courage, all other virtues remain aspirations.' },
-        { greek:'εὐψυχία',       en:'Fortitude',         desc:'Steadfastness under difficulty. The strength to hold your line when it would be easy to quit.' },
-        { greek:'μεγαλοψυχία',   en:'Greatness',         desc:'Magnanimity — the belief that you are capable of something worth striving for.' },
+        { greek:'ἀρετή',         en:'Excellence',   desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds.' },
+        { greek:'εὐδαιμονία',    en:'Flourishing',  desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned.' },
+        { greek:'φρόνησις',      en:'Wisdom',        desc:'Practical wisdom. Knowing what to do and when — transforming knowledge into right action.' },
+        { greek:'ἐγκράτεια',     en:'Self-Mastery',  desc:'The discipline to act by your values, not your impulses. The foundation of all freedom.' },
+        { greek:'σωφροσύνη',     en:'Temperance',    desc:'Balance in all things. Right proportion — knowing when enough is exactly enough.' },
+        { greek:'εὐθυμία',       en:'Contentment',   desc:'The calm that comes from knowing you gave your best — not despite effort, because of it.' },
+        { greek:'ἀνδρεία',       en:'Courage',       desc:'The willingness to act in spite of fear. Without courage, all other virtues remain aspirations.' },
+        { greek:'εὐψυχία',       en:'Fortitude',     desc:'Steadfastness under difficulty. The strength to hold your line when it would be easy to quit.' },
+        { greek:'μεγαλοψυχία',   en:'Greatness',     desc:'Magnanimity — the belief that you are capable of something worth striving for.' },
     ];
 
     const PATTERNS = [
@@ -1439,268 +1442,334 @@
           E:[[0,9],[9,1],[0,2],[2,10],[10,4],[4,6],[1,3],[3,11],[11,5],[5,7],[6,12],[12,7],[8,0],[8,1],[8,4],[8,5],[9,12]] },
     ];
 
-    // Pick one pattern randomly on load — never changes until page refresh
-    const P = PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
-    const mainNodes = P.M.map(([fx,fy],i)=>({fx,fy,...VIRTUES[i]}));
-    const connNodes = P.C.map(([fx,fy])=>({fx,fy}));
-    const allNodes  = [...mainNodes,...connNodes];
+    const P = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+    const mainNodes = P.M.map(([fx,fy], i) => ({ fx, fy, ...VIRTUES[i] }));
+    const connNodes = P.C.map(([fx,fy])    => ({ fx, fy }));
+    const allNodes  = [...mainNodes, ...connNodes];
     const edges     = P.E;
 
-    // Ambient background stars
-    const ambient=[];
-    function buildAmbient(){
-        ambient.length=0;
-        for(let i=0;i<65;i++) ambient.push({fx:Math.random(),fy:Math.random(),r:Math.random()*.65+.15,op:Math.random()*.11+.04,tw:Math.random()*Math.PI*2});
+    /* Pan bounds — cam center stays within star extent so nothing flies off screen */
+    const minFx = Math.min(...mainNodes.map(n => n.fx));
+    const maxFx = Math.max(...mainNodes.map(n => n.fx));
+    const minFy = Math.min(...mainNodes.map(n => n.fy));
+    const maxFy = Math.max(...mainNodes.map(n => n.fy));
+    function clampCam() {
+        cam.tcx = Math.max(minFx, Math.min(maxFx, cam.tcx));
+        cam.tcy = Math.max(minFy, Math.min(maxFy, cam.tcy));
+    }
+
+    /* Ambient micro-stars */
+    const ambient = [];
+    function buildAmbient() {
+        ambient.length = 0;
+        for (let i = 0; i < 65; i++)
+            ambient.push({ fx:Math.random(), fy:Math.random(), r:Math.random()*.65+.15, op:Math.random()*.11+.04, tw:Math.random()*Math.PI*2 });
     }
     buildAmbient();
 
-    // Position canvas below the text paragraph
-    function positionCanvas(){
+    /* Canvas sizing — placed below the text body */
+    function positionCanvas() {
         const body = section.querySelector('.origin-body');
-        if(body){
-            const top = body.offsetTop + body.offsetHeight + 32;
-            canvas.style.top    = top + 'px';
-            canvas.style.bottom = '0';
-            canvas.style.height = Math.max(400, section.offsetHeight - top - 20) + 'px';
-        }
-        W = canvas.offsetWidth  || 900;
-        H = canvas.offsetHeight || 520;
+        let top = 60;
+        if (body) top = body.offsetTop + body.offsetHeight + 36;
+        canvas.style.top    = top + 'px';
+        canvas.style.bottom = '0';
+        W = section.clientWidth || window.innerWidth;
+        H = Math.max(440, section.clientHeight - top - 16);
+        canvas.style.height = H + 'px';
         canvas.width  = W;
         canvas.height = H;
     }
 
-    function toScreen(fx,fy){ return{ x:(fx-cam.cx)*cam.scale*W+W/2, y:(fy-cam.cy)*cam.scale*H+H/2 }; }
-    function toFrac(sx,sy){ return{ fx:(sx-W/2)/(cam.scale*W)+cam.cx, fy:(sy-H/2)/(cam.scale*H)+cam.cy }; }
-    function dist(ax,ay,bx,by){ return Math.sqrt((ax-bx)**2+(ay-by)**2); }
+    /* Coordinate helpers */
+    function toScreen(fx, fy) { return { x: (fx - cam.cx)*cam.scale*W + W/2, y: (fy - cam.cy)*cam.scale*H + H/2 }; }
+    function toFrac(sx, sy)   { return { fx: (sx - W/2)/(cam.scale*W) + cam.cx, fy: (sy - H/2)/(cam.scale*H) + cam.cy }; }
+    function dist2d(ax,ay,bx,by) { return Math.sqrt((ax-bx)**2 + (ay-by)**2); }
 
-    // Star-click zoom (only camera movement allowed)
-    function zoomToStar(idx){
-        if(starZoomed) return;
-        starZoomed=true; starIdx=idx;
-        preCx=cam.tcx; preCy=cam.tcy; preS=cam.ts;
-        cam.tcx=mainNodes[idx].fx;
-        cam.tcy=mainNodes[idx].fy;
-        cam.ts = Math.min(MAX_S, Math.max(cam.scale,.7)*3.4);
-        oGreek.textContent=mainNodes[idx].greek;
-        oEn.textContent   =mainNodes[idx].en;
-        oDesc.textContent =mainNodes[idx].desc;
-        setTimeout(()=>overlay.classList.add('visible'),700);
+    /* Hit-test: returns mainNode index or -1 */
+    function getHit(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const f    = toFrac(clientX - rect.left, clientY - rect.top);
+        let hit = -1, best = 44 / (cam.scale * Math.min(W, H));
+        mainNodes.forEach((n, i) => {
+            const d = dist2d(f.fx, f.fy, n.fx, n.fy);
+            if (d < best) { best = d; hit = i; }
+        });
+        return hit;
     }
-    function zoomOut(){
-        starZoomed=false; starIdx=-1;
+
+    /* Zoom to star on click */
+    function zoomToStar(idx) {
+        if (starZoomed) return;
+        starZoomed = true; starIdx = idx;
+        preCx = cam.tcx; preCy = cam.tcy; preS = cam.ts;
+        cam.tcx = mainNodes[idx].fx;
+        cam.tcy = mainNodes[idx].fy;
+        cam.ts  = Math.min(4.0, Math.max(cam.scale, .7) * 3.4);
+        oGreek.textContent = mainNodes[idx].greek;
+        oEn.textContent    = mainNodes[idx].en;
+        oDesc.textContent  = mainNodes[idx].desc;
+        setTimeout(() => overlay.classList.add('visible'), 700);
+    }
+    function zoomOut() {
+        starZoomed = false; starIdx = -1;
         overlay.classList.remove('visible');
-        cam.tcx=preCx; cam.tcy=preCy; cam.ts=preS;
+        cam.tcx = preCx; cam.tcy = preCy; cam.ts = preS;
     }
-    oBack?.addEventListener('click',e=>{ e.stopPropagation(); zoomOut(); });
+    oBack?.addEventListener('click', e => { e.stopPropagation(); zoomOut(); });
 
-    // Click to select star — no drag, no pan, no scroll zoom
-    canvas.addEventListener('click',e=>{
-        if(starZoomed) return;
-        const rect=canvas.getBoundingClientRect();
-        const f=toFrac(e.clientX-rect.left, e.clientY-rect.top);
-        let hit=-1, best=40/(cam.scale*Math.min(W,H));
-        mainNodes.forEach((n,i)=>{ const d=dist(f.fx,f.fy,n.fx,n.fy); if(d<best){best=d;hit=i;} });
-        if(hit>=0) zoomToStar(hit);
+    /* ── Mouse: drag to pan, click to select ── */
+    canvas.addEventListener('mousedown', e => {
+        if (starZoomed) return;
+        isDragging  = true;
+        didDrag     = false;
+        dragX       = e.clientX;
+        dragY       = e.clientY;
+        camStartCx  = cam.tcx;
+        camStartCy  = cam.tcy;
+        canvas.style.cursor = 'grabbing';
     });
 
-    // Hover — update hovIdx, cursor
-    canvas.addEventListener('mousemove',e=>{
-        if(starZoomed){ hovIdx=-1; return; }
-        const rect=canvas.getBoundingClientRect();
-        const f=toFrac(e.clientX-rect.left, e.clientY-rect.top);
-        let best=-1, bd=40/(cam.scale*Math.min(W,H));
-        mainNodes.forEach((n,i)=>{ const d=dist(f.fx,f.fy,n.fx,n.fy); if(d<bd){bd=d;best=i;} });
-        hovIdx=best;
-        canvas.style.cursor=best>=0?'pointer':'default';
+    window.addEventListener('mousemove', e => {
+        if (isDragging) {
+            const dx = e.clientX - dragX, dy = e.clientY - dragY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
+            if (didDrag) {
+                cam.tcx = camStartCx - dx / (cam.scale * W);
+                cam.tcy = camStartCy - dy / (cam.scale * H);
+                clampCam();
+                hovIdx = -1;
+            }
+        } else if (!starZoomed) {
+            hovIdx = getHit(e.clientX, e.clientY);
+            const rect = canvas.getBoundingClientRect();
+            const inCanvas = e.clientX >= rect.left && e.clientX <= rect.right &&
+                             e.clientY >= rect.top  && e.clientY <= rect.bottom;
+            if (inCanvas) canvas.style.cursor = hovIdx >= 0 ? 'pointer' : 'grab';
+        } else {
+            hovIdx = -1;
+        }
     });
-    canvas.addEventListener('mouseleave',()=>{ hovIdx=-1; });
 
-    // ── Star drawing: ring + 4-pointed sparkle + glow (old clean style) ──
-    function drawStar(x,y,size,opacity){
-        // Clip to canvas so nothing bleeds outside
+    window.addEventListener('mouseup', e => {
+        if (!isDragging) return;
+        if (!didDrag && !starZoomed) {
+            const hit = getHit(e.clientX, e.clientY);
+            if (hit >= 0) zoomToStar(hit);
+        }
+        isDragging = false;
+        canvas.style.cursor = hovIdx >= 0 ? 'pointer' : 'grab';
+    });
+
+    canvas.addEventListener('mouseleave', () => { if (!isDragging) hovIdx = -1; });
+
+    /* ── Touch: drag to pan, tap to select ── */
+    let touchAnchor = null;
+    canvas.addEventListener('touchstart', e => {
+        if (starZoomed || e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        touchAnchor = { x: t.clientX, y: t.clientY };
+        camStartCx = cam.tcx; camStartCy = cam.tcy;
+        didDrag = false;
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', e => {
+        if (!touchAnchor || e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = t.clientX - touchAnchor.x, dy = t.clientY - touchAnchor.y;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didDrag = true;
+        if (didDrag) {
+            cam.tcx = camStartCx - dx / (cam.scale * W);
+            cam.tcy = camStartCy - dy / (cam.scale * H);
+            clampCam();
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', e => {
+        if (!didDrag && touchAnchor && !starZoomed) {
+            const t   = e.changedTouches[0];
+            const hit = getHit(t.clientX, t.clientY);
+            if (hit >= 0) zoomToStar(hit);
+        }
+        touchAnchor = null;
+    });
+
+    /* ── Drawing helpers ── */
+    function drawStar(x, y, size, opacity) {
         ctx.save();
-        // Outer glow
-        const g=ctx.createRadialGradient(x,y,0,x,y,size*5.5);
-        g.addColorStop(0,`rgba(201,168,76,${opacity*.26})`);
-        g.addColorStop(.5,`rgba(201,168,76,${opacity*.06})`);
-        g.addColorStop(1,'rgba(201,168,76,0)');
-        ctx.beginPath();ctx.arc(x,y,size*5.5,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
-        // Ring
-        ctx.beginPath();ctx.arc(x,y,size*1.9,0,Math.PI*2);
-        ctx.strokeStyle=`rgba(201,168,76,${opacity*.72})`;ctx.lineWidth=0.85;ctx.stroke();
-        // 4-pointed sparkle arms
-        ctx.translate(x,y);
-        ctx.fillStyle=`rgba(228,182,70,${opacity*.88})`;
-        for(let a=0;a<4;a++){
-            ctx.rotate(Math.PI/2);
-            ctx.beginPath();ctx.moveTo(0,-size*3.1);
-            ctx.quadraticCurveTo(size*.24,-size*.24,0,0);
-            ctx.quadraticCurveTo(-size*.24,-size*.24,0,-size*3.1);
+        const g = ctx.createRadialGradient(x,y,0, x,y, size*5.5);
+        g.addColorStop(0,  `rgba(201,168,76,${opacity*.26})`);
+        g.addColorStop(.5, `rgba(201,168,76,${opacity*.06})`);
+        g.addColorStop(1,  'rgba(201,168,76,0)');
+        ctx.beginPath(); ctx.arc(x,y, size*5.5, 0, Math.PI*2); ctx.fillStyle = g; ctx.fill();
+
+        ctx.beginPath(); ctx.arc(x,y, size*1.9, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(201,168,76,${opacity*.72})`; ctx.lineWidth = 0.85; ctx.stroke();
+
+        ctx.translate(x, y);
+        ctx.fillStyle = `rgba(228,182,70,${opacity*.88})`;
+        for (let a = 0; a < 4; a++) {
+            ctx.rotate(Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(0, -size*3.1);
+            ctx.quadraticCurveTo(size*.24, -size*.24, 0, 0);
+            ctx.quadraticCurveTo(-size*.24, -size*.24, 0, -size*3.1);
             ctx.fill();
         }
-        // Bright core
-        ctx.beginPath();ctx.arc(0,0,size*.7,0,Math.PI*2);
-        ctx.fillStyle=`rgba(255,242,165,${opacity})`;ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, size*.7, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255,242,165,${opacity})`; ctx.fill();
         ctx.restore();
     }
 
-    function drawDot(x,y,r,op){
-        const g=ctx.createRadialGradient(x,y,0,x,y,r*3);
-        g.addColorStop(0,`rgba(255,235,150,${op*.55})`);g.addColorStop(1,'rgba(201,168,76,0)');
-        ctx.beginPath();ctx.arc(x,y,r*3,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
-        ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=`rgba(228,182,70,${op})`;ctx.fill();
+    function drawDot(x, y, r, op) {
+        const g = ctx.createRadialGradient(x,y,0, x,y, r*3);
+        g.addColorStop(0, `rgba(255,235,150,${op*.55})`);
+        g.addColorStop(1, 'rgba(201,168,76,0)');
+        ctx.beginPath(); ctx.arc(x,y, r*3, 0, Math.PI*2); ctx.fillStyle = g; ctx.fill();
+        ctx.beginPath(); ctx.arc(x,y, r,   0, Math.PI*2); ctx.fillStyle = `rgba(228,182,70,${op})`; ctx.fill();
     }
 
-    let fr=0;
-    function draw(){
+    function fadeA(t) { return t < .3 ? t/.3 : t > .85 ? (1-t)/.15 : 1; }
+
+    /* ── Render loop ── */
+    let fr = 0;
+    function draw() {
         requestAnimationFrame(draw);
         fr++;
-        const now=fr*.016, k=.075;
+        const now = fr * .016, k = .075;
 
-        // Lerp camera (only used for star-click zoom)
-        cam.scale+=(cam.ts-cam.scale)*k;
-        cam.cx   +=(cam.tcx-cam.cx)*k;
-        cam.cy   +=(cam.tcy-cam.cy)*k;
+        cam.scale += (cam.ts  - cam.scale) * k;
+        cam.cx    += (cam.tcx - cam.cx)    * k;
+        cam.cy    += (cam.tcy - cam.cy)    * k;
 
-        // Animate hover progress per node
-        for(let i=0;i<9;i++){
-            hovAnim[i]=i===hovIdx
-                ?Math.min(1,hovAnim[i]+0.055)   // fills in ~18 frames ≈ 300ms
-                :Math.max(0,hovAnim[i]-0.040);   // fades out ~25 frames ≈ 415ms
+        for (let i = 0; i < 9; i++) {
+            hovAnim[i] = i === hovIdx
+                ? Math.min(1, hovAnim[i] + .055)
+                : Math.max(0, hovAnim[i] - .040);
         }
 
-        // ── Draw (everything clipped to canvas) ──
-        ctx.clearRect(0,0,W,H);
+        ctx.clearRect(0, 0, W, H);
         ctx.save();
-        ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
+        ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
 
-        // Ambient micro-stars
-        for(const s of ambient){
-            const p=toScreen(s.fx,s.fy);
-            if(p.x<-4||p.x>W+4||p.y<-4||p.y>H+4) continue;
-            ctx.beginPath();ctx.arc(p.x,p.y,s.r,0,Math.PI*2);
-            ctx.fillStyle=`rgba(201,168,76,${s.op*(0.8+0.2*Math.sin(now+s.tw))})`;ctx.fill();
+        /* Ambient micro-stars */
+        for (const s of ambient) {
+            const p = toScreen(s.fx, s.fy);
+            if (p.x < -4 || p.x > W+4 || p.y < -4 || p.y > H+4) continue;
+            ctx.beginPath(); ctx.arc(p.x, p.y, s.r, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(201,168,76,${s.op * (0.8 + 0.2*Math.sin(now+s.tw))})`; ctx.fill();
         }
 
-        // Constellation lines — dim base + hover fill-in
-        for(let ei=0;ei<edges.length;ei++){
-            const[i,j]=edges[ei];
-            const a=allNodes[i],b=allNodes[j];
-            const pa=toScreen(a.fx,a.fy), pb=toScreen(b.fx,b.fy);
-            const mi=i<9?i:-1, mj=j<9?j:-1;
+        /* Constellation edges */
+        for (let ei = 0; ei < edges.length; ei++) {
+            const [i, j] = edges[ei];
+            const a = allNodes[i], b = allNodes[j];
+            const pa = toScreen(a.fx, a.fy), pb = toScreen(b.fx, b.fy);
+            const mi = i < 9 ? i : -1, mj = j < 9 ? j : -1;
 
-            // Always draw faint base line
-            ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);
-            ctx.strokeStyle='rgba(201,168,76,.16)';ctx.lineWidth=.55;ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
+            ctx.strokeStyle = 'rgba(201,168,76,.16)'; ctx.lineWidth = .55; ctx.stroke();
 
-            // Hover-animated overlay line
-            const ha=Math.max(mi>=0?hovAnim[mi]:0, mj>=0?hovAnim[mj]:0);
-            const sa=starZoomed&&(mi===starIdx||mj===starIdx)?1:0;
-            const bright=Math.max(ha,sa);
-            if(bright>0){
-                // Draw partial line based on hover progress (fills from node outward)
-                const t=bright;
-                const ex=pa.x+(pb.x-pa.x)*t, ey=pa.y+(pb.y-pa.y)*t;
-                ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(ex,ey);
-                ctx.strokeStyle=`rgba(201,168,76,${.55*bright})`;ctx.lineWidth=1.0;ctx.stroke();
+            const ha     = Math.max(mi >= 0 ? hovAnim[mi] : 0, mj >= 0 ? hovAnim[mj] : 0);
+            const sa     = starZoomed && (mi === starIdx || mj === starIdx) ? 1 : 0;
+            const bright = Math.max(ha, sa);
+            if (bright > 0) {
+                const ex = pa.x + (pb.x - pa.x)*bright, ey = pa.y + (pb.y - pa.y)*bright;
+                ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(ex, ey);
+                ctx.strokeStyle = `rgba(201,168,76,${.55 * bright})`; ctx.lineWidth = 1.0; ctx.stroke();
             }
         }
 
-        // Connector dots
-        for(let i=9;i<allNodes.length;i++){
-            const n=allNodes[i],p=toScreen(n.fx,n.fy);
-            const ha=edges.some(([a,b])=>(a===i||b===i)&&(a<9?hovAnim[a]:0,b<9?hovAnim[b]:0))
-                ? Math.max(...edges.filter(([a,b])=>a===i||b===i).map(([a,b])=>Math.max(a<9?hovAnim[a]:0,b<9?hovAnim[b]:0)))
+        /* Connector dots */
+        for (let i = 9; i < allNodes.length; i++) {
+            const n      = allNodes[i], p = toScreen(n.fx, n.fy);
+            const linked = edges.filter(([a,b]) => a === i || b === i);
+            const ha     = linked.length > 0
+                ? Math.max(...linked.map(([a,b]) => Math.max(a<9 ? hovAnim[a] : 0, b<9 ? hovAnim[b] : 0)))
                 : 0;
-            drawDot(p.x,p.y, ha>0?2.0:1.4, .28+ha*.40);
+            drawDot(p.x, p.y, ha > 0 ? 2.0 : 1.4, .28 + ha*.40);
         }
 
-        // Labels (draw behind stars)
-        const lA=Math.max(0,Math.min(1,(2.4-cam.scale)/1.2));
-        if(lA>.02){
-            const signs=[[-.6,-1],[.6,-1],[-.6,-1],[.6,1],[.6,-1],[.6,-1],[.6,1],[-.6,1],[.6,1]];
-            for(let i=0;i<9;i++){
-                const n=mainNodes[i],p=toScreen(n.fx,n.fy);
-                const[sx,sy]=signs[i];
-                const isA=starZoomed&&i===starIdx;
-                const ha=hovAnim[i];
-                const off=22;
-                ctx.font=`${isA||ha>.5?600:400} 10px Inter,sans-serif`;
-                ctx.fillStyle=`rgba(201,168,76,${(isA?.88:(.35+ha*.45))*lA})`;
-                ctx.textAlign=sx<0?'right':'left';
-                ctx.fillText(`${n.greek} · ${n.en}`,p.x+sx*off,p.y+sy*off);
+        /* Star labels — fade as camera zooms in */
+        const lA = Math.max(0, Math.min(1, (2.4 - cam.scale) / 1.2));
+        if (lA > .02) {
+            const signs = [[-.6,-1],[.6,-1],[-.6,-1],[.6,1],[.6,-1],[.6,-1],[.6,1],[-.6,1],[.6,1]];
+            for (let i = 0; i < 9; i++) {
+                const n = mainNodes[i], p = toScreen(n.fx, n.fy);
+                const [sx, sy] = signs[i];
+                const isA = starZoomed && i === starIdx;
+                const ha  = hovAnim[i];
+                ctx.font      = `${isA || ha > .5 ? 600 : 400} 10px Inter,sans-serif`;
+                ctx.fillStyle = `rgba(201,168,76,${(isA ? .88 : (.35 + ha*.45)) * lA})`;
+                ctx.textAlign = sx < 0 ? 'right' : 'left';
+                ctx.fillText(`${n.greek} · ${n.en}`, p.x + sx*22, p.y + sy*22);
             }
         }
 
-        // Stars (on top of everything, pop out on hover)
-        for(let i=0;i<9;i++){
-            const n=mainNodes[i],p=toScreen(n.fx,n.fy);
-            const isStar=starZoomed&&i===starIdx;
-            const ha=hovAnim[i];
-            const pulse=isStar?(.84+.16*Math.sin(now*2.4)):(1+ha*.06*Math.sin(now*3+i));
-            // Scale pops up smoothly with hover
-            const popScale=1+ha*.55;
-            const sz=isStar?7.5*pulse:4.0*popScale*pulse;
-            const op=isStar?1.0:(.68+ha*.24);
-            drawStar(p.x,p.y,sz,op);
-            if(isStar){
-                ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
-                ctx.beginPath();ctx.arc(p.x,p.y,22*pulse,0,Math.PI*2);
-                ctx.strokeStyle='rgba(201,168,76,.18)';ctx.lineWidth=.8;ctx.stroke();
-                ctx.beginPath();ctx.arc(p.x,p.y,34*pulse,0,Math.PI*2);
-                ctx.strokeStyle='rgba(201,168,76,.08)';ctx.lineWidth=.6;ctx.stroke();
+        /* Stars */
+        for (let i = 0; i < 9; i++) {
+            const n       = mainNodes[i], p = toScreen(n.fx, n.fy);
+            const isStar  = starZoomed && i === starIdx;
+            const ha      = hovAnim[i];
+            const pulse   = isStar ? (.84 + .16*Math.sin(now*2.4)) : (1 + ha*.06*Math.sin(now*3+i));
+            const popScale = 1 + ha*.55;
+            const sz      = isStar ? 7.5*pulse : 4.0*popScale*pulse;
+            const op      = isStar ? 1.0 : (.68 + ha*.24);
+            drawStar(p.x, p.y, sz, op);
+            if (isStar) {
+                ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
+                ctx.beginPath(); ctx.arc(p.x, p.y, 22*pulse, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(201,168,76,.18)'; ctx.lineWidth = .8; ctx.stroke();
+                ctx.beginPath(); ctx.arc(p.x, p.y, 34*pulse, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(201,168,76,.08)'; ctx.lineWidth = .6; ctx.stroke();
                 ctx.restore();
             }
         }
 
-        // Hover tooltip — appears after hover animates in (ha > 0.6)
-        // Stays fully inside canvas bounds
-        for(let i=0;i<9;i++){
-            const ha=hovAnim[i];
-            if(ha<0.05||starZoomed) continue;
-            const n=mainNodes[i],p=toScreen(n.fx,n.fy);
-            const popScale=1+ha*.55;
-            const starR=4.0*popScale*3.1+8; // roughly the star's visual radius
-            const bw=190,bh=46;
-            // Position tooltip above/beside star, clamp within canvas
-            let bx=p.x+starR+4, by=p.y-bh/2;
-            if(bx+bw>W-4) bx=p.x-starR-bw-4;
-            if(by<4)      by=4;
-            if(by+bh>H-4) by=H-bh-4;
-            ctx.globalAlpha=Math.min(1,(ha-.05)/.5)*fadeA(ha);
-            ctx.fillStyle='rgba(7,7,14,.88)';
-            if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,7);
-            else ctx.rect(bx,by,bw,bh);
+        /* Hover tooltip — clamped to canvas bounds */
+        for (let i = 0; i < 9; i++) {
+            const ha = hovAnim[i];
+            if (ha < .05 || starZoomed) continue;
+            const n       = mainNodes[i], p = toScreen(n.fx, n.fy);
+            const popScale = 1 + ha*.55;
+            const starR   = 4.0*popScale*3.1 + 8;
+            const bw = 192, bh = 50;
+            let bx = p.x + starR + 4, by = p.y - bh/2;
+            if (bx + bw > W - 4) bx = p.x - starR - bw - 4;
+            if (by < 4)           by = 4;
+            if (by + bh > H - 4)  by = H - bh - 4;
+            ctx.globalAlpha = Math.min(1, (ha - .05)/.5) * fadeA(ha);
             ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,7);
+            if (ctx.roundRect) ctx.roundRect(bx,by,bw,bh,8);
             else ctx.rect(bx,by,bw,bh);
-            ctx.fill();
-            ctx.strokeStyle='rgba(201,168,76,.32)';ctx.lineWidth=.7;ctx.stroke();
-            ctx.font='600 11px Inter,sans-serif';
-            ctx.fillStyle='rgba(201,168,76,.96)';ctx.textAlign='left';
-            ctx.fillText(n.en,bx+10,by+16);
-            ctx.font='400 9px Inter,sans-serif';
-            ctx.fillStyle='rgba(255,255,255,.48)';
-            const snippet=n.desc.length>50?n.desc.substring(0,48)+'…':n.desc;
-            ctx.fillText(snippet,bx+10,by+30);
-            ctx.globalAlpha=1;
+            ctx.fillStyle = 'rgba(7,7,14,.90)'; ctx.fill();
+            ctx.strokeStyle = 'rgba(201,168,76,.32)'; ctx.lineWidth = .7; ctx.stroke();
+            ctx.font = '600 11px Inter,sans-serif';
+            ctx.fillStyle = 'rgba(201,168,76,.96)'; ctx.textAlign = 'left';
+            ctx.fillText(n.en, bx+10, by+17);
+            ctx.font = '400 9px Inter,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,.50)';
+            ctx.fillText(n.desc.length > 52 ? n.desc.substring(0,50)+'…' : n.desc, bx+10, by+32);
+            ctx.globalAlpha = 1;
         }
 
-        // Pattern name hint (bottom center)
-        ctx.font='400 10px Inter,sans-serif';
-        ctx.fillStyle='rgba(201,168,76,.28)';ctx.textAlign='center';
-        ctx.fillText(`${P.name.toUpperCase()}  ·  click a star to explore ✦`,W/2,H-10);
+        /* Bottom hint */
+        ctx.font      = '400 10px Inter,sans-serif';
+        ctx.fillStyle = 'rgba(201,168,76,.26)'; ctx.textAlign = 'center';
+        ctx.fillText(`${P.name.toUpperCase()}  ·  drag to explore  ·  click a star ✦`, W/2, H-10);
 
-        ctx.restore(); // clip
+        ctx.restore();
     }
 
-    function fadeA(t){ return t<.3?t/.3:t>.85?(1-t)/.15:1; }
-
+    canvas.style.cursor = 'grab';
     positionCanvas();
-    cam.cx=cam.tcx; cam.cy=cam.tcy; cam.scale=cam.ts;
+    cam.cx = cam.tcx; cam.cy = cam.tcy; cam.scale = cam.ts;
     draw();
-    setTimeout(positionCanvas,350);
-    window.addEventListener('resize',()=>{ positionCanvas(); buildAmbient(); });
+    if (document.fonts?.ready) document.fonts.ready.then(positionCanvas);
+    setTimeout(positionCanvas, 400);
+    window.addEventListener('resize', () => { positionCanvas(); buildAmbient(); });
 })();
 
 
@@ -2104,6 +2173,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
