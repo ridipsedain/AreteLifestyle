@@ -82,7 +82,7 @@
             background: linear-gradient(155deg, #FAFAF8 0%, #F5F2EB 60%, #EDE8DC 100%);
         }
         #three-canvas { display: none; }
-        #constellation-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        #constellation-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
         .hero-inner {
             position: relative; z-index: 1;
             display: grid; grid-template-columns: 1.1fr 0.9fr;
@@ -612,6 +612,7 @@
     </style>
 </head>
 <body>
+<canvas id="constellation-canvas"></canvas>
 
 <!-- NAV -->
 <nav id="nav">
@@ -640,7 +641,6 @@
 <!-- HERO -->
 <section id="hero">
     <canvas id="three-canvas"></canvas>
-    <canvas id="constellation-canvas"></canvas>
     <div class="hero-inner">
         <div class="hero-quote-banner" id="quote-wrap">
             <div class="hero-quote-slide active">"Excellence is not an act, but a habit."<span class="q-attr">— Aristotle</span></div>
@@ -1109,18 +1109,26 @@
     const canvas = document.getElementById('constellation-canvas');
     const ctx = canvas.getContext('2d');
     let W, H;
-    const STAR_COUNT = 100;
+
+    // Stars stored as absolute page coordinates (px, py in page space)
+    const STAR_COUNT = 180;
     const stars = [];
+
+    function pageHeight() {
+        return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 3000);
+    }
 
     function buildStars() {
         stars.length = 0;
+        const PH = pageHeight();
         for (let i = 0; i < STAR_COUNT; i++) {
             stars.push({
-                fx: Math.random(),
-                fy: Math.random(),
-                r:  Math.random() * 1.8 + 0.6,
-                op: Math.random() * 0.4 + 0.3,
-                twinkle: Math.random() * Math.PI * 2,
+                px: Math.random() * W,          // absolute x in page
+                py: Math.random() * PH,          // absolute y in page
+                r:  Math.random() * 2.2 + 1.0,  // star glow radius
+                op: Math.random() * 0.35 + 0.3, // base opacity
+                tw: Math.random() * Math.PI * 2, // twinkle phase
+                spikes: Math.random() > 0.5 ? 4 : 4, // all 4-pointed
             });
         }
     }
@@ -1130,49 +1138,89 @@
         H = canvas.height = window.innerHeight;
     }
 
-    let tx = 0, ty = 0, px = 0, py = 0;
+    // Draw a 4-pointed glowing star shape
+    function drawStar(x, y, r, opacity) {
+        // Outer glow
+        const grd = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+        grd.addColorStop(0,   `rgba(212,170,60,${opacity * 0.55})`);
+        grd.addColorStop(0.4, `rgba(195,148,45,${opacity * 0.18})`);
+        grd.addColorStop(1,   `rgba(195,148,45,0)`);
+        ctx.beginPath();
+        ctx.arc(x, y, r * 4, 0, Math.PI * 2);
+        ctx.fillStyle = grd;
+        ctx.fill();
+
+        // 4-pointed cross sparkle
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = `rgba(230,185,75,${opacity})`;
+        for (let a = 0; a < 4; a++) {
+            ctx.rotate(Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 3.2);
+            ctx.quadraticCurveTo(r * 0.35, -r * 0.35, 0, 0);
+            ctx.quadraticCurveTo(-r * 0.35, -r * 0.35, 0, -r * 3.2);
+            ctx.fill();
+        }
+        // Bright core
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,235,140,${opacity})`;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Mouse parallax
+    let tx = 0, ty = 0, mx = 0, my = 0;
     document.addEventListener('mousemove', e => {
-        tx = (e.clientX / window.innerWidth  - 0.5) * 28;
-        ty = (e.clientY / window.innerHeight - 0.5) * 18;
+        tx = (e.clientX / window.innerWidth  - 0.5) * 30;
+        ty = (e.clientY / window.innerHeight - 0.5) * 20;
     });
 
     let frame = 0;
     function draw() {
         requestAnimationFrame(draw);
         frame++;
-        px += (tx - px) * 0.05;
-        py += (ty - py) * 0.05;
+        mx += (tx - mx) * 0.05;
+        my += (ty - my) * 0.05;
 
         ctx.clearRect(0, 0, W, H);
 
-        const now = frame * 0.016;
-        const sx = stars.map(s => s.fx * W + px);
-        const sy = stars.map(s => s.fy * H + py);
+        const now      = frame * 0.014;
+        const scrollY  = window.scrollY || 0;
 
-        // Connecting lines
+        // Convert page coords to screen coords
+        const sx = stars.map(s => s.px + mx);
+        const sy = stars.map(s => s.py - scrollY + my);
+
+        // Only process stars visible on screen (with margin)
+        const MARGIN = 200;
+        const visible = stars.map((s, i) => sy[i] > -MARGIN && sy[i] < H + MARGIN);
+
+        // Connecting lines between nearby visible stars
         for (let i = 0; i < stars.length; i++) {
+            if (!visible[i]) continue;
             for (let j = i + 1; j < stars.length; j++) {
+                if (!visible[j]) continue;
                 const dx = sx[i] - sx[j], dy = sy[i] - sy[j];
-                const d = Math.sqrt(dx*dx + dy*dy);
-                if (d < 150) {
+                const d  = Math.sqrt(dx*dx + dy*dy);
+                if (d < 160) {
                     ctx.beginPath();
                     ctx.moveTo(sx[i], sy[i]);
                     ctx.lineTo(sx[j], sy[j]);
-                    ctx.strokeStyle = `rgba(140,105,30,${0.18 * (1 - d/150)})`;
-                    ctx.lineWidth = 0.8;
+                    ctx.strokeStyle = `rgba(195,148,45,${0.22 * (1 - d/160)})`;
+                    ctx.lineWidth = 0.7;
                     ctx.stroke();
                 }
             }
         }
 
-        // Stars
+        // Draw glowing stars
         for (let i = 0; i < stars.length; i++) {
-            const s = stars[i];
-            const tw = 0.75 + 0.25 * Math.sin(now + s.twinkle);
-            ctx.beginPath();
-            ctx.arc(sx[i], sy[i], s.r, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(160,120,45,${s.op * tw})`;
-            ctx.fill();
+            if (!visible[i]) continue;
+            const s  = stars[i];
+            const tw = 0.78 + 0.22 * Math.sin(now + s.tw);
+            drawStar(sx[i], sy[i], s.r, s.op * tw);
         }
     }
 
@@ -1629,6 +1677,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
