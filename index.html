@@ -81,7 +81,8 @@
             padding: 130px 6% 90px; overflow: hidden;
             background: linear-gradient(155deg, #FAFAF8 0%, #F5F2EB 60%, #EDE8DC 100%);
         }
-        #three-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        #three-canvas { display: none; }
+        #constellation-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
         .hero-inner {
             position: relative; z-index: 1;
             display: grid; grid-template-columns: 1.1fr 0.9fr;
@@ -639,6 +640,7 @@
 <!-- HERO -->
 <section id="hero">
     <canvas id="three-canvas"></canvas>
+    <canvas id="constellation-canvas"></canvas>
     <div class="hero-inner">
         <div class="hero-quote-banner" id="quote-wrap">
             <div class="hero-quote-slide active">"Excellence is not an act, but a habit."<span class="q-attr">— Aristotle</span></div>
@@ -705,19 +707,6 @@
 
         <div class="hero-visual">
             <div class="phone-scene">
-                <div class="notif-bubble">
-                    <div class="nb-header">
-                        <div class="nb-icon">⚡</div>
-                        <span class="nb-app">Arete Coach</span>
-                        <span class="nb-time">now</span>
-                    </div>
-                    <p class="nb-msg">"Your sleep dropped 40 min last night. Let's keep today's goals lighter."</p>
-                </div>
-                <div class="fc fc-check">
-                    <div class="fc-label">Today's streak</div>
-                    <div class="fc-value">14 🔥</div>
-                    <div class="fc-sub">Days in a row</div>
-                </div>
                 <div class="phone">
                     <div class="phone-island"></div>
                     <div class="phone-screen">
@@ -1117,23 +1106,21 @@
 <script>
 // ── HERO: CONSTELLATION ───────────────────────────────────────────────
 (function () {
-    const canvas = document.getElementById('three-canvas');
+    const canvas = document.getElementById('constellation-canvas');
     const ctx = canvas.getContext('2d');
     let W, H;
-
-    // Star data — fixed positions as fraction of screen
-    const STAR_COUNT = 110;
+    const STAR_COUNT = 100;
     const stars = [];
 
     function buildStars() {
         stars.length = 0;
         for (let i = 0; i < STAR_COUNT; i++) {
             stars.push({
-                fx: Math.random(),          // fractional x (0-1)
-                fy: Math.random(),          // fractional y (0-1)
-                r:  Math.random() * 1.4 + 0.35,
-                op: Math.random() * 0.35 + 0.12,
-                twinkleOffset: Math.random() * Math.PI * 2,
+                fx: Math.random(),
+                fy: Math.random(),
+                r:  Math.random() * 1.8 + 0.6,
+                op: Math.random() * 0.4 + 0.3,
+                twinkle: Math.random() * Math.PI * 2,
             });
         }
     }
@@ -1143,54 +1130,48 @@
         H = canvas.height = window.innerHeight;
     }
 
-    // Mouse parallax
-    let tx = 0, ty = 0, cx = 0, cy = 0;
+    let tx = 0, ty = 0, px = 0, py = 0;
     document.addEventListener('mousemove', e => {
-        tx = (e.clientX / window.innerWidth  - 0.5) * 22;
-        ty = (e.clientY / window.innerHeight - 0.5) * 14;
+        tx = (e.clientX / window.innerWidth  - 0.5) * 28;
+        ty = (e.clientY / window.innerHeight - 0.5) * 18;
     });
 
     let frame = 0;
     function draw() {
         requestAnimationFrame(draw);
         frame++;
-
-        // Smooth mouse follow
-        cx += (tx - cx) * 0.045;
-        cy += (ty - cy) * 0.045;
+        px += (tx - px) * 0.05;
+        py += (ty - py) * 0.05;
 
         ctx.clearRect(0, 0, W, H);
 
-        const now = frame * 0.018;
+        const now = frame * 0.016;
+        const sx = stars.map(s => s.fx * W + px);
+        const sy = stars.map(s => s.fy * H + py);
 
-        // Pre-compute screen positions with parallax offset
-        const sx = stars.map(s => s.fx * W + cx);
-        const sy = stars.map(s => s.fy * H + cy);
-
-        // Draw connecting lines between nearby stars
-        ctx.lineWidth = 0.5;
+        // Connecting lines
         for (let i = 0; i < stars.length; i++) {
             for (let j = i + 1; j < stars.length; j++) {
                 const dx = sx[i] - sx[j], dy = sy[i] - sy[j];
-                const d = Math.sqrt(dx * dx + dy * dy);
-                if (d < 140) {
+                const d = Math.sqrt(dx*dx + dy*dy);
+                if (d < 150) {
                     ctx.beginPath();
                     ctx.moveTo(sx[i], sy[i]);
                     ctx.lineTo(sx[j], sy[j]);
-                    ctx.strokeStyle = `rgba(154,123,46,${0.09 * (1 - d / 140)})`;
+                    ctx.strokeStyle = `rgba(140,105,30,${0.18 * (1 - d/150)})`;
+                    ctx.lineWidth = 0.8;
                     ctx.stroke();
                 }
             }
         }
 
-        // Draw stars with gentle twinkle
+        // Stars
         for (let i = 0; i < stars.length; i++) {
             const s = stars[i];
-            const twinkle = 0.8 + 0.2 * Math.sin(now + s.twinkleOffset);
-            const op = s.op * twinkle;
+            const tw = 0.75 + 0.25 * Math.sin(now + s.twinkle);
             ctx.beginPath();
             ctx.arc(sx[i], sy[i], s.r, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(180,148,72,${op})`;
+            ctx.fillStyle = `rgba(160,120,45,${s.op * tw})`;
             ctx.fill();
         }
     }
@@ -1648,5 +1629,6 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
