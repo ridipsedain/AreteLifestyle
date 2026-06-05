@@ -343,21 +343,26 @@
         #origin {
             background: #07070E;
             position: relative; text-align: center; overflow: hidden;
-            padding: 130px 6%;
+            padding: 130px 6%; min-height: 750px;
         }
-        #greek-canvas { display: block; width: 100%; height: 520px; position: relative; z-index: 1; cursor: grab; pointer-events: auto; border-radius: 16px; }
-        #greek-canvas:active { cursor: grabbing; }
+        /* Canvas fills the ENTIRE section */
+        #greek-canvas {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            display: block; z-index: 0;
+            pointer-events: none;
+        }
         .origin-cam-controls {
-            position: absolute; bottom: 16px; right: 16px; z-index: 3;
+            position: absolute; bottom: 22px; right: 5%; z-index: 2;
             display: flex; flex-direction: column; gap: 6px;
         }
         .origin-cam-btn {
             width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
-            background: rgba(7,7,14,.75); border: 1px solid rgba(201,168,76,.35);
+            background: rgba(7,7,14,.82); border: 1px solid rgba(201,168,76,.35);
             color: var(--gold); font-size: 20px; font-weight: 300; line-height: 1;
             display: flex; align-items: center; justify-content: center;
             transition: all .2s ease; font-family: 'Inter', sans-serif;
-            backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px); pointer-events: all;
         }
         .origin-cam-btn:hover { background: rgba(201,168,76,.18); border-color: var(--gold); }
         #origin .s-inner { position: relative; z-index: 1; }
@@ -395,7 +400,7 @@
         .origin-constellation { margin-top: 56px; position: relative; }
         /* Zoom overlay — sits on top of canvas when a star is clicked */
         .origin-zoom-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 520px;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             opacity: 0; pointer-events: none;
             transition: opacity .55s ease;
@@ -1017,6 +1022,20 @@
 
 <!-- GREEK ORIGIN -->
 <section id="origin">
+    <!-- Canvas fills the entire section; z-index: 0 behind text -->
+    <canvas id="greek-canvas"></canvas>
+    <!-- Star-click overlay; z-index: 3 above everything -->
+    <div class="origin-zoom-overlay" id="origin-zoom-overlay">
+        <div class="ozoom-greek" id="ozoom-greek"></div>
+        <div class="ozoom-en"    id="ozoom-en"></div>
+        <div class="ozoom-desc"  id="ozoom-desc"></div>
+        <button class="ozoom-back" id="ozoom-back">← Back to Stars</button>
+    </div>
+    <!-- Zoom controls -->
+    <div class="origin-cam-controls">
+        <button class="origin-cam-btn" id="origin-zoom-in">+</button>
+        <button class="origin-cam-btn" id="origin-zoom-out">−</button>
+    </div>
     <div class="s-inner">
         <div class="origin-watermark">ἀρετή</div>
         <div class="origin-body rv">
@@ -1029,20 +1048,6 @@
             <p class="origin-quote">"We are what we repeatedly do. Excellence, then, is not an act, but a habit."</p>
             <p class="origin-attribution">Aristotle &nbsp;·&nbsp; Nicomachean Ethics, 350 BC</p>
             <p class="origin-text">The ancient Greeks believed ἀρετή was the highest calling of a human life. Not wealth. Not fame. The daily striving to become who you were capable of being. That idea is 2,400 years old and more relevant than anything you'll find in a self-help book. We named this app after it because we believe a daily practice, done with intention, with the right guide, changes everything.</p>
-
-            <div class="origin-constellation rv d1">
-                <canvas id="greek-canvas"></canvas>
-                <div class="origin-zoom-overlay" id="origin-zoom-overlay">
-                    <div class="ozoom-greek"  id="ozoom-greek"></div>
-                    <div class="ozoom-en"     id="ozoom-en"></div>
-                    <div class="ozoom-desc"   id="ozoom-desc"></div>
-                    <button class="ozoom-back" id="ozoom-back">← Back to Hercules</button>
-                </div>
-                <div class="origin-cam-controls">
-                    <button class="origin-cam-btn" id="origin-zoom-in">+</button>
-                    <button class="origin-cam-btn" id="origin-zoom-out">−</button>
-                </div>
-            </div>
         </div>
     </div>
 </section>
@@ -1385,11 +1390,12 @@
 })();
 
 
-// ── ORIGIN: HERCULES CONSTELLATION ────────────────────────────────────
+// ── ORIGIN: ROTATING CONSTELLATION ───────────────────────────────────
 (function () {
     const canvas  = document.getElementById('greek-canvas');
     if (!canvas) return;
     const ctx     = canvas.getContext('2d');
+    const section = document.getElementById('origin');
     const overlay = document.getElementById('origin-zoom-overlay');
     const oGreek  = document.getElementById('ozoom-greek');
     const oEn     = document.getElementById('ozoom-en');
@@ -1397,293 +1403,230 @@
     const oBack   = document.getElementById('ozoom-back');
     let W, H;
 
-    const cam = { x:413, y:384, scale:1, tx:413, ty:384, ts:1 };
-    const MIN_SCALE = 0.35, MAX_SCALE = 3.5;
-    let starZoomed = false, starIdx = -1, preCamX, preCamY, preCamS;
+    // Camera in fractional space (cx/cy = 0.5 = center of pattern)
+    const cam = { cx:0.5, cy:0.5, scale:1, tcx:0.5, tcy:0.5, ts:1 };
+    const MIN_S = 0.45, MAX_S = 4.0;
+    let starZoomed=false, starIdx=-1, preCx, preCy, preS;
 
-    // ── HERCULES constellation ──
-    // Star positions derived from actual catalog data for the Heracles/Hercules
-    // constellation, rescaled to fill natural space ~850 × 720.
-    // 9 main clickable stars + 8 connector nodes. Rendering order:
-    //   ambient → edges → labels → star-rings/sparkles (stars always on top).
-    // ── 9 clickable main nodes — actual Hercules catalog positions rescaled ──
-    const M = [
-        { x:307,y:372, greek:'ἀρετή',         en:'Excellence',       desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
-        { x:297,y:229, greek:'εὐδαιμονία',    en:'Flourishing',      desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
-        { x:183,y: 75, greek:'φρόνησις',      en:'Wisdom',           desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
-        { x:394,y:387, greek:'ἐγκράτεια',     en:'Self-Mastery',     desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
-        { x:462,y:239, greek:'σωφροσύνη',     en:'Temperance',       desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
-        { x:749,y:253, greek:'εὐθυμία',       en:'Contentment',      desc:"The quiet peace of a well-lived day. The calm that comes from knowing you gave your best — not despite your effort, because of it." },
-        { x:463,y:692, greek:'ἀνδρεία',       en:'Courage',          desc:'The willingness to act in spite of fear. Aristotle called it the first virtue — without courage, all others remain aspirations.' },
-        { x:251,y:565, greek:'εὐψυχία',       en:'Fortitude',        desc:'Steadfastness under difficulty. Not the absence of hardship, but the strength to hold your line when it would be easy to quit.' },
-        { x:699,y:439, greek:'μεγαλοψυχία',   en:'Greatness of Soul',desc:'Magnanimity — the aspiration toward the highest things. The belief that you are capable of something worth striving for.' },
-    ];
-    // 8 connector (non-clickable) nodes — fill the Hercules figure
-    const C = [
-        { x:462,y:502 }, // 9  δ Her
-        { x:194,y:607 }, // 10 γ Her
-        { x: 75,y:625 }, // 11 κ Her
-        { x:628,y: 82 }, // 12 ι Her
-        { x:260,y:157 }, // 13 σ Her
-        { x:515,y:251 }, // 14 ρ Her
-        { x:751,y:417 }, // 15 ξ Her
-        { x: 75,y:107 }, // 16 φ Her
-    ];
-    const all = [...M, ...C]; // indices 0-8 = main, 9-16 = connectors
-
-    // Edges (based on actual Hercules star connectivity)
-    const edges = [
-        // Keystone (central torso quadrilateral — most famous part of Hercules)
-        [0,1],[1,4],[4,3],[3,0],
-        // Left arm (η→σ→τ, σ→φ)
-        [1,13],[13,2],[13,16],
-        // Right arm (π→ρ→θ, θ→ι)
-        [4,14],[14,5],[5,12],
-        // Lower body — left leg (ζ→β→γ→κ)
-        [0,7],[7,10],[10,11],
-        // Lower body — right leg (ε→δ→α)
-        [3,9],[9,6],
-        // Side connections (ε→μ→ξ, δ→ξ)
-        [3,8],[8,15],[9,15],
-        // Extra cross-connection
-        [5,8],
+    // ── 5 constellation patterns — one picked randomly each page load ──
+    const VIRTUES = [
+        { greek:'ἀρετή',         en:'Excellence',        desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
+        { greek:'εὐδαιμονία',    en:'Flourishing',       desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
+        { greek:'φρόνησις',      en:'Wisdom',            desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
+        { greek:'ἐγκράτεια',     en:'Self-Mastery',      desc:'The discipline to act by your values, not your impulses. Ancient Greeks saw self-mastery as the foundation of all freedom.' },
+        { greek:'σωφροσύνη',     en:'Temperance',        desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
+        { greek:'εὐθυμία',       en:'Contentment',       desc:'The quiet peace of a well-lived day. The calm that comes from knowing you gave your best — not despite effort, because of it.' },
+        { greek:'ἀνδρεία',       en:'Courage',           desc:'The willingness to act in spite of fear. Aristotle called it the first virtue — without courage, all others remain aspirations.' },
+        { greek:'εὐψυχία',       en:'Fortitude',         desc:'Steadfastness under difficulty. Not the absence of hardship, but the strength to hold your line when it would be easy to quit.' },
+        { greek:'μεγαλοψυχία',   en:'Greatness of Soul', desc:'Magnanimity — the aspiration toward the highest things. The belief that you are capable of something worth striving for.' },
     ];
 
-    const ambient = [];
-    function buildAmbient() {
-        ambient.length = 0;
-        for (let i = 0; i < 60; i++) ambient.push({
-            x: Math.random()*820+15, y: Math.random()*710+15,
-            r: Math.random()*1.0+0.2, op: Math.random()*0.16+0.04,
-            tw: Math.random()*Math.PI*2,
-        });
+    const PATTERNS = [
+        { name:'Eagle',
+          M:[[.50,.11],[.06,.30],[.94,.30],[.50,.50],[.24,.37],[.76,.37],[.37,.83],[.63,.83],[.50,.73]],
+          C:[[.50,.23],[.15,.34],[.85,.34],[.50,.61],[.43,.68],[.57,.68]],
+          E:[[0,9],[9,4],[9,5],[4,10],[10,1],[5,11],[11,2],[4,3],[5,3],[3,12],[12,8],[12,13],[13,6],[12,14],[14,7]] },
+        { name:'Phoenix',
+          M:[[.50,.09],[.07,.40],[.93,.40],[.50,.53],[.27,.43],[.73,.43],[.27,.88],[.50,.93],[.73,.88]],
+          C:[[.50,.20],[.17,.42],[.83,.42],[.50,.68],[.36,.77],[.64,.77]],
+          E:[[0,9],[9,4],[9,5],[4,10],[10,1],[5,11],[11,2],[4,3],[5,3],[3,12],[12,13],[13,6],[13,7],[12,14],[14,8],[14,7],[6,7],[7,8]] },
+        { name:'Compass',
+          M:[[.50,.07],[.74,.19],[.89,.50],[.74,.81],[.50,.93],[.26,.81],[.11,.50],[.26,.19],[.50,.50]],
+          C:[],
+          E:[[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,8],[7,8],[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[0,4],[2,6]] },
+        { name:'Anchor',
+          M:[[.50,.07],[.42,.13],[.58,.13],[.50,.27],[.19,.47],[.81,.47],[.28,.85],[.50,.91],[.72,.85]],
+          C:[[.50,.38],[.50,.57],[.22,.70],[.78,.70]],
+          E:[[0,1],[0,2],[1,2],[0,3],[3,9],[9,4],[9,5],[9,10],[10,11],[11,6],[11,7],[10,12],[12,8],[12,7],[6,7],[7,8]] },
+        { name:'Lyre',
+          M:[[.30,.10],[.70,.10],[.14,.23],[.86,.23],[.18,.63],[.82,.63],[.32,.88],[.68,.88],[.50,.42]],
+          C:[[.50,.11],[.11,.42],[.89,.42],[.50,.86]],
+          E:[[0,9],[9,1],[0,2],[2,10],[10,4],[4,6],[1,3],[3,11],[11,5],[5,7],[6,12],[12,7],[8,0],[8,1],[8,4],[8,5],[9,12]] },
+    ];
+
+    const P = PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
+    const mainNodes = P.M.map(([fx,fy],i)=>({fx,fy,...VIRTUES[i]}));
+    const connNodes = P.C.map(([fx,fy])=>({fx,fy}));
+    const allNodes  = [...mainNodes,...connNodes];
+    const edges = P.E;
+
+    const ambient=[];
+    function buildAmbient(){
+        ambient.length=0;
+        for(let i=0;i<75;i++) ambient.push({fx:Math.random(),fy:Math.random(),r:Math.random()*.8+.15,op:Math.random()*.13+.04,tw:Math.random()*Math.PI*2});
     }
 
-    function resize() {
-        W = canvas.width  = canvas.offsetWidth  || 860;
-        H = canvas.height = canvas.offsetHeight || 520;
-        if (!starZoomed) fitView();
+    function resize(){
+        W=canvas.width =section.offsetWidth ||900;
+        H=canvas.height=section.offsetHeight||750;
+        if(!starZoomed){cam.tcx=.5;cam.tcy=.5;cam.ts=1.0;}
     }
-    function fitView() {
-        // Spread all 17 nodes across ~676×617 natural space; center at (413,384)
-        const padding = 70;
-        cam.tx = 413; cam.ty = 384;
-        cam.ts = Math.min((W - padding*2) / 676, (H - padding*2) / 617);
-    }
-    function toNat(sx,sy){ return { x:(sx-W/2)/cam.scale+cam.x, y:(sy-H/2)/cam.scale+cam.y }; }
-    function dist(ax,ay,bx,by){ return Math.sqrt((ax-bx)**2+(ay-by)**2); }
+    function toScreen(fx,fy){return{x:(fx-cam.cx)*cam.scale*W+W/2,y:(fy-cam.cy)*cam.scale*H+H/2};}
+    function toFrac(sx,sy){return{fx:(sx-W/2)/(cam.scale*W)+cam.cx,fy:(sy-H/2)/(cam.scale*H)+cam.cy};}
+    function dist(ax,ay,bx,by){return Math.sqrt((ax-bx)**2+(ay-by)**2);}
 
-    // ── Star-zoom ──
-    function zoomToStar(idx) {
-        if (starZoomed) return;
-        starZoomed = true; starIdx = idx;
-        preCamX = cam.tx; preCamY = cam.ty; preCamS = cam.ts;
-        cam.tx = M[idx].x; cam.ty = M[idx].y;
-        cam.ts = Math.min(MAX_SCALE, Math.max(cam.scale, 0.9) * 3.4);
-        oGreek.textContent = M[idx].greek;
-        oEn.textContent    = M[idx].en;
-        oDesc.textContent  = M[idx].desc;
-        setTimeout(() => overlay.classList.add('visible'), 720);
+    function zoomToStar(idx){
+        if(starZoomed)return;
+        starZoomed=true;starIdx=idx;
+        preCx=cam.tcx;preCy=cam.tcy;preS=cam.ts;
+        cam.tcx=mainNodes[idx].fx;cam.tcy=mainNodes[idx].fy;
+        cam.ts=Math.min(MAX_S,Math.max(cam.scale,.8)*3.8);
+        oGreek.textContent=mainNodes[idx].greek;
+        oEn.textContent   =mainNodes[idx].en;
+        oDesc.textContent =mainNodes[idx].desc;
+        setTimeout(()=>overlay.classList.add('visible'),730);
     }
-    function zoomOutStar() {
-        starZoomed = false; starIdx = -1;
+    function zoomOut(){
+        starZoomed=false;starIdx=-1;
         overlay.classList.remove('visible');
-        cam.tx = preCamX; cam.ty = preCamY; cam.ts = preCamS;
+        cam.tcx=preCx;cam.tcy=preCy;cam.ts=preS;
     }
-    oBack.addEventListener('click', zoomOutStar);
+    oBack?.addEventListener('click',e=>{e.stopPropagation();zoomOut();});
 
-    // ── Pan ──
-    const drag = { on:false, sx:0, sy:0, ox:0, oy:0 };
-    let moved = false;
-    canvas.addEventListener('mousedown', e => {
-        if (starZoomed) return;
-        drag.on=true; moved=false;
-        drag.sx=e.clientX; drag.sy=e.clientY;
-        drag.ox=cam.tx; drag.oy=cam.ty;
-        canvas.style.cursor='grabbing';
+    const drag={on:false,sx:0,sy:0,ocx:0,ocy:0};let moved=false;
+    section.addEventListener('mousedown',e=>{
+        if(['BUTTON','A','INPUT'].includes(e.target.tagName)||starZoomed)return;
+        drag.on=true;moved=false;
+        drag.sx=e.clientX;drag.sy=e.clientY;drag.ocx=cam.tcx;drag.ocy=cam.tcy;
+        section.style.cursor='grabbing';
     });
-    window.addEventListener('mousemove', e => {
-        if (!drag.on) return;
-        const dx=(e.clientX-drag.sx)/cam.scale, dy=(e.clientY-drag.sy)/cam.scale;
-        if (Math.abs(dx)>3||Math.abs(dy)>3) moved=true;
-        cam.tx=drag.ox-dx; cam.ty=drag.oy-dy;
+    window.addEventListener('mousemove',e=>{
+        if(!drag.on)return;
+        const dx=(e.clientX-drag.sx)/(cam.scale*W),dy=(e.clientY-drag.sy)/(cam.scale*H);
+        if(Math.abs(dx)>.003||Math.abs(dy)>.003)moved=true;
+        cam.tcx=drag.ocx-dx;cam.tcy=drag.ocy-dy;
     });
-    window.addEventListener('mouseup', () => { drag.on=false; canvas.style.cursor=starZoomed?'default':'grab'; });
+    window.addEventListener('mouseup',()=>{drag.on=false;if(!starZoomed)section.style.cursor='';});
 
-    // Touch
     let t0=null;
-    canvas.addEventListener('touchstart',e=>{ if(starZoomed||e.touches.length!==1)return; t0={x:e.touches[0].clientX,y:e.touches[0].clientY,ox:cam.tx,oy:cam.ty}; },{passive:true});
-    canvas.addEventListener('touchmove',e=>{ if(!t0||e.touches.length!==1)return; cam.tx=t0.ox-(e.touches[0].clientX-t0.x)/cam.scale; cam.ty=t0.oy-(e.touches[0].clientY-t0.y)/cam.scale; },{passive:true});
-    canvas.addEventListener('touchend',()=>{ t0=null; });
+    section.addEventListener('touchstart',e=>{if(starZoomed||e.touches.length!==1)return;t0={x:e.touches[0].clientX,y:e.touches[0].clientY,ocx:cam.tcx,ocy:cam.tcy};},{passive:true});
+    section.addEventListener('touchmove',e=>{if(!t0||e.touches.length!==1)return;cam.tcx=t0.ocx-(e.touches[0].clientX-t0.x)/(cam.scale*W);cam.tcy=t0.ocy-(e.touches[0].clientY-t0.y)/(cam.scale*H);},{passive:true});
+    section.addEventListener('touchend',()=>t0=null);
 
-    // Scroll zoom
-    canvas.addEventListener('wheel',e=>{ e.preventDefault(); cam.ts=Math.max(MIN_SCALE,Math.min(MAX_SCALE,cam.ts*(e.deltaY<0?1.12:0.9))); },{passive:false});
-    document.getElementById('origin-zoom-in') ?.addEventListener('click',()=>{ cam.ts=Math.min(MAX_SCALE,cam.ts*1.28); });
-    document.getElementById('origin-zoom-out')?.addEventListener('click',()=>{ cam.ts=Math.max(MIN_SCALE,cam.ts*0.78); });
+    section.addEventListener('wheel',e=>{e.preventDefault();cam.ts=Math.max(MIN_S,Math.min(MAX_S,cam.ts*(e.deltaY<0?1.12:.90)));},{passive:false});
+    document.getElementById('origin-zoom-in') ?.addEventListener('click',e=>{e.stopPropagation();cam.ts=Math.min(MAX_S,cam.ts*1.3);});
+    document.getElementById('origin-zoom-out')?.addEventListener('click',e=>{e.stopPropagation();cam.ts=Math.max(MIN_S,cam.ts*.77);});
 
-    // Click to select star
-    canvas.addEventListener('click', e => {
-        if (starZoomed || moved) return;
-        const rect = canvas.getBoundingClientRect();
-        const n = toNat((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
-        let hit=-1, best=36/cam.scale;
-        M.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<best){best=d;hit=i;} });
-        if (hit>=0) zoomToStar(hit);
+    section.addEventListener('click',e=>{
+        if(moved||starZoomed)return;
+        if(['BUTTON','A'].includes(e.target.tagName))return;
+        const rect=section.getBoundingClientRect();
+        const f=toFrac(e.clientX-rect.left,e.clientY-rect.top);
+        let hit=-1,best=40/(cam.scale*Math.min(W,H));
+        mainNodes.forEach((n,i)=>{const d=dist(f.fx,f.fy,n.fx,n.fy);if(d<best){best=d;hit=i;}});
+        if(hit>=0)zoomToStar(hit);
     });
 
-    // Hover
     let hovIdx=-1;
-    canvas.addEventListener('mousemove', e => {
-        if (drag.on||starZoomed){ hovIdx=-1; return; }
-        const rect=canvas.getBoundingClientRect();
-        const n=toNat((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
-        let best=-1, bd=36/cam.scale;
-        M.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<bd){bd=d;best=i;} });
+    section.addEventListener('mousemove',e=>{
+        if(drag.on||starZoomed){hovIdx=-1;return;}
+        const rect=section.getBoundingClientRect();
+        const f=toFrac(e.clientX-rect.left,e.clientY-rect.top);
+        let best=-1,bd=40/(cam.scale*Math.min(W,H));
+        mainNodes.forEach((n,i)=>{const d=dist(f.fx,f.fy,n.fx,n.fy);if(d<bd){bd=d;best=i;}});
         hovIdx=best;
-        canvas.style.cursor=(best>=0)?'pointer':'grab';
+        if(!drag.on&&!starZoomed)section.style.cursor=best>=0?'pointer':'';
     });
 
-    // ── Draw sparkle ──
-    function sparkle(x,y,r,col) {
-        ctx.save(); ctx.translate(x,y); ctx.fillStyle=col;
+    function drawStar(x,y,size,opacity){
+        const hz=ctx.createRadialGradient(x,y,0,x,y,size*10);
+        hz.addColorStop(0,`rgba(255,235,150,${opacity*.12})`);hz.addColorStop(.45,`rgba(201,168,76,${opacity*.04})`);hz.addColorStop(1,'rgba(201,168,76,0)');
+        ctx.beginPath();ctx.arc(x,y,size*10,0,Math.PI*2);ctx.fillStyle=hz;ctx.fill();
+        const mg=ctx.createRadialGradient(x,y,0,x,y,size*4.5);
+        mg.addColorStop(0,`rgba(255,248,195,${opacity*.55})`);mg.addColorStop(.5,`rgba(210,165,65,${opacity*.20})`);mg.addColorStop(1,'rgba(201,168,76,0)');
+        ctx.beginPath();ctx.arc(x,y,size*4.5,0,Math.PI*2);ctx.fillStyle=mg;ctx.fill();
+        ctx.save();ctx.translate(x,y);
+        ctx.fillStyle=`rgba(228,182,70,${opacity*.82})`;
         for(let a=0;a<4;a++){
             ctx.rotate(Math.PI/2);
-            ctx.beginPath();
-            ctx.moveTo(0,-r*3.2);
-            ctx.quadraticCurveTo(r*0.3,-r*0.3,0,0);
-            ctx.quadraticCurveTo(-r*0.3,-r*0.3,0,-r*3.2);
-            ctx.fill();
+            ctx.beginPath();ctx.moveTo(0,-size*5.4);
+            ctx.quadraticCurveTo(size*.13,-size*.13,0,0);
+            ctx.quadraticCurveTo(-size*.13,-size*.13,0,-size*5.4);ctx.fill();
         }
+        const cr=ctx.createRadialGradient(0,0,0,0,0,size*1.7);
+        cr.addColorStop(0,`rgba(255,255,255,${opacity})`);cr.addColorStop(.3,`rgba(255,250,210,${opacity*.94})`);cr.addColorStop(.7,`rgba(218,174,68,${opacity*.6})`);cr.addColorStop(1,'rgba(201,168,76,0)');
+        ctx.beginPath();ctx.arc(0,0,size*1.7,0,Math.PI*2);ctx.fillStyle=cr;ctx.fill();
         ctx.restore();
     }
 
-    // Label offsets for each main node (keep labels from overlapping edges)
-    const LO = [
-        {dx:-16,dy:-30,ta:'right'}, // 0 ζ (keystone BL)
-        {dx:-16,dy:-28,ta:'right'}, // 1 η (keystone TL)
-        {dx:-14,dy:-22,ta:'right'}, // 2 τ (top left)
-        {dx: 16,dy: 28,ta:'left' }, // 3 ε (keystone BR)
-        {dx: 16,dy:-28,ta:'left' }, // 4 π (keystone TR)
-        {dx: 16,dy:-26,ta:'left' }, // 5 θ (right arm)
-        {dx: 16,dy: 28,ta:'left' }, // 6 α (bottom)
-        {dx:-16,dy: 28,ta:'right'}, // 7 β (lower left)
-        {dx: 16,dy: 26,ta:'left' }, // 8 μ (lower right)
-    ];
+    function drawDot(x,y,r,op){
+        const g=ctx.createRadialGradient(x,y,0,x,y,r*3.5);
+        g.addColorStop(0,`rgba(255,240,160,${op*.65})`);g.addColorStop(1,'rgba(201,168,76,0)');
+        ctx.beginPath();ctx.arc(x,y,r*3.5,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+        ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=`rgba(230,185,75,${op})`;ctx.fill();
+    }
+
+    const labelSigns=[[-.6,-1],[.6,-1],[-.6,-1],[.6,1],[.6,-1],[.6,-1],[.6,1],[-.6,1],[.6,1]];
 
     let fr=0;
-    function draw() {
-        requestAnimationFrame(draw);
-        fr++;
-        const now=fr*0.016;
-        const k=0.075;
-        cam.scale+=(cam.ts-cam.scale)*k;
-        cam.x+=(cam.tx-cam.x)*k;
-        cam.y+=(cam.ty-cam.y)*k;
-
+    function draw(){
+        requestAnimationFrame(draw);fr++;
+        const now=fr*.016,k=.072;
+        cam.scale+=(cam.ts-cam.scale)*k;cam.cx+=(cam.tcx-cam.cx)*k;cam.cy+=(cam.tcy-cam.cy)*k;
         ctx.clearRect(0,0,W,H);
-        ctx.save(); ctx.rect(0,0,W,H); ctx.clip();   // clip
-        ctx.save();                                    // camera
-        ctx.translate(W/2,H/2);
-        ctx.scale(cam.scale,cam.scale);
-        ctx.translate(-cam.x,-cam.y);
 
-        // PASS 1 — ambient + edges + connector dots (all behind labels & stars)
         for(const s of ambient){
-            const tw=0.8+0.2*Math.sin(now+s.tw);
-            ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-            ctx.fillStyle=`rgba(201,168,76,${s.op*tw})`; ctx.fill();
+            const p=toScreen(s.fx,s.fy);
+            if(p.x<-8||p.x>W+8||p.y<-8||p.y>H+8)continue;
+            ctx.beginPath();ctx.arc(p.x,p.y,s.r,0,Math.PI*2);
+            ctx.fillStyle=`rgba(201,168,76,${s.op*(0.8+0.2*Math.sin(now+s.tw))})`;ctx.fill();
         }
-        for(const [i,j] of edges){
-            const a=all[i],b=all[j];
-            const mi=i<9?i:-1, mj=j<9?j:-1;
-            const lit=(starZoomed&&(mi===starIdx||mj===starIdx))||
-                      (!starZoomed&&hovIdx>=0&&(mi===hovIdx||mj===hovIdx));
-            ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-            ctx.strokeStyle=lit?'rgba(201,168,76,0.58)':'rgba(201,168,76,0.20)';
-            ctx.lineWidth=lit?1.1:0.65; ctx.stroke();
+        for(const[i,j]of edges){
+            const a=allNodes[i],b=allNodes[j];
+            const pa=toScreen(a.fx,a.fy),pb=toScreen(b.fx,b.fy);
+            const mi=i<9?i:-1,mj=j<9?j:-1;
+            const lit=(starZoomed&&(mi===starIdx||mj===starIdx))||(!starZoomed&&hovIdx>=0&&(mi===hovIdx||mj===hovIdx));
+            ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);
+            ctx.strokeStyle=lit?'rgba(201,168,76,.52)':'rgba(201,168,76,.18)';
+            ctx.lineWidth=lit?1.0:.6;ctx.stroke();
         }
-        for(let i=9;i<all.length;i++){
-            const n=all[i];
-            const lit=edges.some(([a,b])=>(a===i||b===i)&&
-                ((starZoomed&&(a===starIdx||b===starIdx))||(!starZoomed&&hovIdx>=0&&(a===hovIdx||b===hovIdx))));
-            sparkle(n.x,n.y,lit?2.6:1.7,lit?'rgba(215,172,65,0.68)':'rgba(201,168,76,0.26)');
-            ctx.beginPath(); ctx.arc(n.x,n.y,lit?1.2:0.8,0,Math.PI*2);
-            ctx.fillStyle=lit?'rgba(255,230,130,0.88)':'rgba(220,180,80,0.44)'; ctx.fill();
+        for(let i=9;i<allNodes.length;i++){
+            const n=allNodes[i],p=toScreen(n.fx,n.fy);
+            const lit=edges.some(([a,b])=>(a===i||b===i)&&((starZoomed&&(a===starIdx||b===starIdx))||(!starZoomed&&hovIdx>=0&&(a===hovIdx||b===hovIdx))));
+            drawDot(p.x,p.y,lit?2.1:1.4,lit?.70:.28);
         }
 
-        // PASS 2 — labels (drawn BEFORE sparkles so stars appear on top of text)
-        const lAlpha=Math.max(0,Math.min(1,(2.6-cam.scale)/1.4));
-        if(lAlpha>0.03){
-            for(let i=0;i<M.length;i++){
-                const n=M[i], lo=LO[i];
-                const isActive=starZoomed&&i===starIdx, isHov=!starZoomed&&i===hovIdx;
-                const baseA=isActive?.85:isHov?.70:.38;
-                ctx.font=`${isHov||isActive?'600':'400'} 10px Inter,sans-serif`;
-                ctx.fillStyle=`rgba(201,168,76,${baseA*lAlpha})`;
-                ctx.textAlign=lo.ta;
-                ctx.fillText(`${n.greek} · ${n.en}`,n.x+lo.dx,n.y+lo.dy);
-                // "click" hint on hover
-                if(isHov&&lAlpha>0.5){
+        const lA=Math.max(0,Math.min(1,(2.6-cam.scale)/1.4));
+        if(lA>.02){
+            for(let i=0;i<mainNodes.length;i++){
+                const n=mainNodes[i],p=toScreen(n.fx,n.fy);
+                const[sx,sy]=labelSigns[i];
+                const isA=starZoomed&&i===starIdx,isH=!starZoomed&&i===hovIdx;
+                const off=20;
+                ctx.font=`${isA||isH?600:400} 10px Inter,sans-serif`;
+                ctx.fillStyle=`rgba(201,168,76,${(isA?.86:isH?.70:.38)*lA})`;
+                ctx.textAlign=sx<0?'right':'left';
+                ctx.fillText(`${n.greek} · ${n.en}`,p.x+sx*off,p.y+sy*off);
+                if(isH&&lA>.45){
                     ctx.font='400 9px Inter,sans-serif';
-                    ctx.fillStyle=`rgba(201,168,76,${0.45*lAlpha})`;
-                    ctx.fillText('tap to explore',n.x+lo.dx,n.y+lo.dy+(lo.dy<0?-13:13));
+                    ctx.fillStyle=`rgba(201,168,76,${.40*lA})`;
+                    ctx.fillText('tap to explore',p.x+sx*off,p.y+sy*(off+13));
                 }
             }
         }
 
-        // PASS 3 — main star glows + rings + sparkles (always on top)
-        for(let i=0;i<M.length;i++){
-            const n=M[i];
-            const isStar=starZoomed&&i===starIdx, isHov=!starZoomed&&i===hovIdx;
-            const pulse=(isStar||isHov)?(0.85+0.15*Math.sin(now*2.4)):(0.9+0.1*Math.sin(now*0.9+i*1.1));
-
-            // Outer ambient glow (always present on main stars)
-            const gr=isStar?62*pulse:isHov?44*pulse:28;
-            const grd=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,gr);
-            grd.addColorStop(0,`rgba(201,168,76,${isStar?.32:isHov?.24:.10})`);
-            grd.addColorStop(0.5,`rgba(201,168,76,${isStar?.08:isHov?.05:.02})`);
-            grd.addColorStop(1,'rgba(201,168,76,0)');
-            ctx.beginPath(); ctx.arc(n.x,n.y,gr,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
-
-            // Ring
-            ctx.beginPath(); ctx.arc(n.x,n.y,isStar?22*pulse:isHov?16:12,0,Math.PI*2);
-            ctx.strokeStyle=isStar?'rgba(201,168,76,.92)':isHov?'rgba(201,168,76,.72)':'rgba(201,168,76,.38)';
-            ctx.lineWidth=isStar?1.6:isHov?1.2:0.85; ctx.stroke();
+        for(let i=0;i<mainNodes.length;i++){
+            const n=mainNodes[i],p=toScreen(n.fx,n.fy);
+            const isStar=starZoomed&&i===starIdx,isHov=!starZoomed&&i===hovIdx;
+            const pulse=(isStar||isHov)?(.84+.16*Math.sin(now*2.4)):(.9+.1*Math.sin(now*.8+i*1.3));
+            drawStar(p.x,p.y,isStar?8*pulse:isHov?6.5*pulse:4.5*pulse,isStar?1:isHov?.90:.70);
             if(isStar){
-                ctx.beginPath(); ctx.arc(n.x,n.y,30*pulse,0,Math.PI*2);
-                ctx.strokeStyle='rgba(201,168,76,0.14)'; ctx.lineWidth=0.7; ctx.stroke();
+                ctx.beginPath();ctx.arc(p.x,p.y,24*pulse,0,Math.PI*2);ctx.strokeStyle='rgba(201,168,76,.20)';ctx.lineWidth=.8;ctx.stroke();
+                ctx.beginPath();ctx.arc(p.x,p.y,38*pulse,0,Math.PI*2);ctx.strokeStyle='rgba(201,168,76,.09)';ctx.lineWidth=.6;ctx.stroke();
             }
-
-            // Sparkle (drawn on top of labels)
-            sparkle(n.x,n.y,
-                isStar?7.5*pulse:isHov?6*pulse:4.2*pulse,
-                isStar?'rgba(240,195,85,.98)':isHov?'rgba(225,182,72,.88)':'rgba(201,168,76,.58)');
-
-            // Core
-            ctx.beginPath(); ctx.arc(n.x,n.y,isStar?3.5*pulse:isHov?2.6:2.1,0,Math.PI*2);
-            ctx.fillStyle=isStar?'rgba(255,245,170,1)':isHov?'rgba(252,228,135,1)':'rgba(230,185,75,.75)'; ctx.fill();
         }
 
-        ctx.restore(); // camera
-
-        // ── HUD: hint text (canvas space, not affected by camera) ──
-        if(!starZoomed&&cam.scale<1.6){
-            const a=Math.min(1,(1.6-cam.scale)/0.7);
-            ctx.font='400 11px Inter,sans-serif';
-            ctx.fillStyle=`rgba(201,168,76,${0.42*a})`;
+        if(!starZoomed&&cam.scale<1.25){
+            const a=Math.min(1,(1.25-cam.scale)/.4);
+            ctx.font='400 11px Inter,sans-serif';ctx.fillStyle=`rgba(201,168,76,${.40*a})`;
             ctx.textAlign='center';
-            ctx.fillText('HERCULES  ·  drag to explore  ·  click a star ✦',W/2,H-14);
+            ctx.fillText(`${P.name.toUpperCase()}  ·  drag to explore  ·  click a star ✦`,W/2,H-14);
         }
-
-        ctx.restore(); // clip
     }
 
-    resize();
-    // Sync current camera instantly on first frame
-    cam.x=cam.tx; cam.y=cam.ty; cam.scale=cam.ts;
-    buildAmbient();
-    draw();
-    window.addEventListener('resize',()=>{ resize(); buildAmbient(); });
+    resize();cam.cx=cam.tcx;cam.cy=cam.tcy;cam.scale=cam.ts;
+    buildAmbient();draw();
+    window.addEventListener('resize',()=>{resize();buildAmbient();});
 })();
 
 
@@ -2087,6 +2030,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
