@@ -1256,31 +1256,68 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ── HERO: CONSTELLATION ───────────────────────────────────────────────
+// ── HERO: STARRY NIGHT CONSTELLATION ─────────────────────────────────
 (function () {
     const canvas = document.getElementById('constellation-canvas');
     const ctx = canvas.getContext('2d');
     let W, H;
 
-    // Stars stored as absolute page coordinates (px, py in page space)
-    const STAR_COUNT = 180;
-    const stars = [];
+    /* Three tiers of stars:
+       tier 0 — dust: tiny dots, hundreds of them, background field
+       tier 1 — mid:  medium sparkles, form loose clusters
+       tier 2 — bright: 4-pointed glowing stars, anchor the constellations */
+    const DUST_COUNT   = 420;
+    const MID_COUNT    = 160;
+    const BRIGHT_COUNT = 70;
+
+    const dustStars   = [];
+    const midStars    = [];
+    const brightStars = [];
 
     function pageHeight() {
-        return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 3000);
+        return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 3200);
     }
 
+    function rnd(min, max) { return Math.random() * (max - min) + min; }
+
     function buildStars() {
-        stars.length = 0;
+        dustStars.length = midStars.length = brightStars.length = 0;
         const PH = pageHeight();
-        for (let i = 0; i < STAR_COUNT; i++) {
-            stars.push({
-                px: Math.random() * W,          // absolute x in page
-                py: Math.random() * PH,          // absolute y in page
-                r:  Math.random() * 2.2 + 1.0,  // star glow radius
-                op: Math.random() * 0.3 + 0.55, // base opacity
-                tw: Math.random() * Math.PI * 2, // twinkle phase
-                spikes: Math.random() > 0.5 ? 4 : 4, // all 4-pointed
+
+        // Dust — tiny pinpricks, mostly top half of page where hero is
+        for (let i = 0; i < DUST_COUNT; i++) {
+            const heroWeight = Math.random() < 0.55; // 55% concentrated in top viewport
+            dustStars.push({
+                px: rnd(0, W),
+                py: heroWeight ? rnd(0, H * 1.4) : rnd(0, PH),
+                r:  rnd(0.3, 1.1),
+                op: rnd(0.18, 0.48),
+                tw: rnd(0, Math.PI * 2),
+                ts: rnd(0.008, 0.020), // twinkle speed
+            });
+        }
+
+        // Mid — soft round glows
+        for (let i = 0; i < MID_COUNT; i++) {
+            midStars.push({
+                px: rnd(0, W),
+                py: rnd(0, PH),
+                r:  rnd(1.0, 2.4),
+                op: rnd(0.38, 0.65),
+                tw: rnd(0, Math.PI * 2),
+                ts: rnd(0.010, 0.022),
+            });
+        }
+
+        // Bright — full 4-pointed star sparkles
+        for (let i = 0; i < BRIGHT_COUNT; i++) {
+            brightStars.push({
+                px: rnd(0, W),
+                py: rnd(0, PH),
+                r:  rnd(1.6, 3.4),
+                op: rnd(0.60, 0.92),
+                tw: rnd(0, Math.PI * 2),
+                ts: rnd(0.012, 0.026),
             });
         }
     }
@@ -1290,34 +1327,58 @@
         H = canvas.height = window.innerHeight;
     }
 
-    // Draw a 4-pointed glowing star shape
-    function drawStar(x, y, r, opacity) {
-        // Outer glow
-        const grd = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
-        grd.addColorStop(0,   `rgba(230,185,70,${opacity * 0.75})`);
-        grd.addColorStop(0.4, `rgba(210,160,45,${opacity * 0.30})`);
-        grd.addColorStop(1,   `rgba(195,148,45,0)`);
+    /* Tiny round dot (dust & mid tier) */
+    function drawDot(x, y, r, opacity) {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3.2);
+        g.addColorStop(0,   `rgba(201,168,76,${opacity})`);
+        g.addColorStop(0.45,`rgba(201,168,76,${opacity * 0.35})`);
+        g.addColorStop(1,   `rgba(201,168,76,0)`);
         ctx.beginPath();
-        ctx.arc(x, y, r * 4, 0, Math.PI * 2);
-        ctx.fillStyle = grd;
+        ctx.arc(x, y, r * 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        // hard core
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,240,160,${opacity * 0.9})`;
+        ctx.fill();
+    }
+
+    /* 4-pointed sparkle (bright tier) */
+    function drawSparkle(x, y, r, opacity) {
+        // wide soft halo
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r * 7);
+        g.addColorStop(0,   `rgba(220,175,65,${opacity * 0.55})`);
+        g.addColorStop(0.3, `rgba(210,158,45,${opacity * 0.22})`);
+        g.addColorStop(1,   `rgba(195,148,45,0)`);
+        ctx.beginPath();
+        ctx.arc(x, y, r * 7, 0, Math.PI * 2);
+        ctx.fillStyle = g;
         ctx.fill();
 
-        // 4-pointed cross sparkle
+        // inner ring
+        ctx.beginPath();
+        ctx.arc(x, y, r * 2.0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(201,168,76,${opacity * 0.65})`;
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+
+        // 4 spike points
         ctx.save();
         ctx.translate(x, y);
-        ctx.fillStyle = `rgba(230,185,75,${opacity})`;
+        ctx.fillStyle = `rgba(228,182,70,${opacity * 0.95})`;
         for (let a = 0; a < 4; a++) {
             ctx.rotate(Math.PI / 2);
             ctx.beginPath();
-            ctx.moveTo(0, -r * 3.2);
-            ctx.quadraticCurveTo(r * 0.35, -r * 0.35, 0, 0);
-            ctx.quadraticCurveTo(-r * 0.35, -r * 0.35, 0, -r * 3.2);
+            ctx.moveTo(0, -r * 3.6);
+            ctx.quadraticCurveTo(r * 0.28, -r * 0.28, 0, 0);
+            ctx.quadraticCurveTo(-r * 0.28, -r * 0.28, 0, -r * 3.6);
             ctx.fill();
         }
-        // Bright core
+        // bright core
         ctx.beginPath();
-        ctx.arc(0, 0, r * 0.7, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,235,140,${opacity})`;
+        ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,245,170,${opacity})`;
         ctx.fill();
         ctx.restore();
     }
@@ -1325,54 +1386,72 @@
     // Mouse parallax
     let tx = 0, ty = 0, mx = 0, my = 0;
     document.addEventListener('mousemove', e => {
-        tx = (e.clientX / window.innerWidth  - 0.5) * 30;
-        ty = (e.clientY / window.innerHeight - 0.5) * 20;
+        tx = (e.clientX / window.innerWidth  - 0.5) * 42;
+        ty = (e.clientY / window.innerHeight - 0.5) * 28;
     });
 
     let frame = 0;
     function draw() {
         requestAnimationFrame(draw);
         frame++;
-        mx += (tx - mx) * 0.05;
-        my += (ty - my) * 0.05;
+        mx += (tx - mx) * 0.04;
+        my += (ty - my) * 0.04;
 
         ctx.clearRect(0, 0, W, H);
 
-        const now      = frame * 0.014;
-        const scrollY  = window.scrollY || 0;
+        const now    = frame * 0.01;
+        const scrollY = window.scrollY || 0;
+        const MARGIN  = 250;
 
-        // Convert page coords to screen coords
-        const sx = stars.map(s => s.px + mx);
-        const sy = stars.map(s => s.py - scrollY + my);
+        /* ── Dust stars ── */
+        for (let i = 0; i < dustStars.length; i++) {
+            const s  = dustStars[i];
+            const sx = s.px + mx * 0.35;
+            const sy = s.py - scrollY * 0.25 + my * 0.35;
+            if (sy < -MARGIN || sy > H + MARGIN) continue;
+            const tw = 0.70 + 0.30 * Math.sin(now * s.ts * 100 + s.tw);
+            drawDot(sx, sy, s.r, s.op * tw);
+        }
 
-        // Only process stars visible on screen (with margin)
-        const MARGIN = 200;
-        const visible = stars.map((s, i) => sy[i] > -MARGIN && sy[i] < H + MARGIN);
+        /* ── Mid stars ── */
+        for (let i = 0; i < midStars.length; i++) {
+            const s  = midStars[i];
+            const sx = s.px + mx * 0.65;
+            const sy = s.py - scrollY * 0.6 + my * 0.65;
+            if (sy < -MARGIN || sy > H + MARGIN) continue;
+            const tw = 0.72 + 0.28 * Math.sin(now * s.ts * 100 + s.tw);
+            drawDot(sx, sy, s.r, s.op * tw);
+        }
 
-        // Connecting lines between nearby visible stars
-        for (let i = 0; i < stars.length; i++) {
-            if (!visible[i]) continue;
-            for (let j = i + 1; j < stars.length; j++) {
-                if (!visible[j]) continue;
-                const dx = sx[i] - sx[j], dy = sy[i] - sy[j];
-                const d  = Math.sqrt(dx*dx + dy*dy);
-                if (d < 160) {
+        /* ── Constellation lines (between bright stars only) ── */
+        const bsx = brightStars.map(s => s.px + mx);
+        const bsy = brightStars.map(s => s.py - scrollY + my);
+        const bvis = bsy.map(y => y > -MARGIN && y < H + MARGIN);
+
+        for (let i = 0; i < brightStars.length; i++) {
+            if (!bvis[i]) continue;
+            for (let j = i + 1; j < brightStars.length; j++) {
+                if (!bvis[j]) continue;
+                const dx = bsx[i] - bsx[j], dy = bsy[i] - bsy[j];
+                const d  = Math.sqrt(dx * dx + dy * dy);
+                if (d < 210) {
+                    const alpha = 0.42 * (1 - d / 210);
                     ctx.beginPath();
-                    ctx.moveTo(sx[i], sy[i]);
-                    ctx.lineTo(sx[j], sy[j]);
-                    ctx.strokeStyle = `rgba(195,148,45,${0.38 * (1 - d/160)})`;
-                    ctx.lineWidth = 0.9;
+                    ctx.moveTo(bsx[i], bsy[i]);
+                    ctx.lineTo(bsx[j], bsy[j]);
+                    ctx.strokeStyle = `rgba(195,155,50,${alpha})`;
+                    ctx.lineWidth = 0.75;
                     ctx.stroke();
                 }
             }
         }
 
-        // Draw glowing stars
-        for (let i = 0; i < stars.length; i++) {
-            if (!visible[i]) continue;
-            const s  = stars[i];
-            const tw = 0.78 + 0.22 * Math.sin(now + s.tw);
-            drawStar(sx[i], sy[i], s.r, s.op * tw);
+        /* ── Bright sparkle stars ── */
+        for (let i = 0; i < brightStars.length; i++) {
+            if (!bvis[i]) continue;
+            const s  = brightStars[i];
+            const tw = 0.75 + 0.25 * Math.sin(now * s.ts * 100 + s.tw);
+            drawSparkle(bsx[i], bsy[i], s.r, s.op * tw);
         }
     }
 
