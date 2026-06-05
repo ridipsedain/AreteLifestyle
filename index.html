@@ -344,9 +344,10 @@
             background: #07070E;
             position: relative; text-align: center; overflow: hidden;
             padding: 130px 6% 80px; min-height: 1150px;
+            isolation: isolate;
         }
-        /* Canvas fills the ENTIRE section */
-        #greek-canvas { position: absolute; left: 0; right: 0; display: block; z-index: 0; pointer-events: auto; }
+        /* Canvas fills the ENTIRE section — z-index:-1 keeps it behind all text/content */
+        #greek-canvas { position: absolute; left: 0; right: 0; display: block; z-index: -1; pointer-events: auto; }
         .origin-cam-controls { display:none; }
         .origin-cam-btn {
             width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
