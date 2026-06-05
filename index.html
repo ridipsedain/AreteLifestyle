@@ -378,32 +378,44 @@
             max-width: 600px; margin: 0 auto;
         }
         /* ── ORIGIN INTERACTIVE CONSTELLATION ── */
-        .origin-constellation { margin-top: 56px; }
-        .origin-items { position: relative; min-height: 160px; text-align: center; margin-top: 48px; }
-        .origin-item {
-            position: absolute; inset: 0;
-            display: flex; flex-direction: column; align-items: center;
-            opacity: 0; transform: translateY(20px) scale(.97);
-            transition: opacity .55s ease, transform .55s ease; pointer-events: none;
+        .origin-constellation { margin-top: 56px; position: relative; }
+        /* Zoom overlay — sits on top of canvas when a star is clicked */
+        .origin-zoom-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 420px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity .55s ease;
+            background: radial-gradient(ellipse at center, rgba(7,7,14,.92) 0%, rgba(7,7,14,.55) 70%, rgba(7,7,14,0) 100%);
+            z-index: 2;
         }
-        .origin-item.active { opacity: 1; transform: translateY(0) scale(1); position: relative; pointer-events: all; }
-        .origin-item-greek { font-family: 'Playfair Display', serif; font-style: italic; font-size: 36px; color: var(--gold); margin-bottom: 8px; }
-        .origin-item-en { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.35); margin-bottom: 18px; font-weight: 600; }
-        .origin-item-desc { font-size: 16px; color: rgba(255,255,255,.52); line-height: 1.78; max-width: 480px; }
-        .origin-nav { display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 44px; }
-        .origin-btn {
-            width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
-            background: rgba(255,255,255,.04); border: 1px solid rgba(201,168,76,.25);
-            color: var(--gold); font-size: 22px; display: flex; align-items: center; justify-content: center;
+        .origin-zoom-overlay.visible { opacity: 1; pointer-events: all; }
+        .ozoom-greek {
+            font-family: 'Playfair Display', serif; font-style: italic;
+            font-size: clamp(34px, 5vw, 58px); color: var(--gold);
+            margin-bottom: 6px;
+            animation: ozoom-in .5s ease both;
+        }
+        .ozoom-en {
+            font-size: 11px; letter-spacing: 3.5px; text-transform: uppercase;
+            color: rgba(255,255,255,.38); margin-bottom: 22px; font-weight: 600;
+            animation: ozoom-in .5s ease .08s both;
+        }
+        .ozoom-desc {
+            font-size: 16px; color: rgba(255,255,255,.62); line-height: 1.78;
+            max-width: 420px; text-align: center; margin-bottom: 34px;
+            padding: 0 20px;
+            animation: ozoom-in .5s ease .16s both;
+        }
+        .ozoom-back {
+            background: none; border: 1px solid rgba(201,168,76,.35);
+            color: var(--gold); padding: 11px 28px; border-radius: 50px;
+            font-size: 12px; letter-spacing: 1.5px; cursor: pointer; text-transform: uppercase;
+            font-family: 'Inter', sans-serif; font-weight: 600;
             transition: all .22s ease;
+            animation: ozoom-in .5s ease .24s both;
         }
-        .origin-btn:hover { background: rgba(201,168,76,.12); border-color: var(--gold); transform: scale(1.1); }
-        .origin-dots { display: flex; gap: 10px; align-items: center; }
-        .origin-nav-dot {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: rgba(255,255,255,.2); cursor: pointer; transition: all .3s ease;
-        }
-        .origin-nav-dot.active { background: var(--gold); transform: scale(1.6); box-shadow: 0 0 8px rgba(201,168,76,.6); }
+        .ozoom-back:hover { background: rgba(201,168,76,.12); border-color: var(--gold); transform: scale(1.05); }
+        @keyframes ozoom-in { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
 
         /* ── PROOF ── */
         #proof { background: rgba(250,250,248,0.84); }
@@ -1006,31 +1018,11 @@
 
             <div class="origin-constellation rv d1">
                 <canvas id="greek-canvas"></canvas>
-                <div class="origin-items">
-                    <div class="origin-item active" data-idx="0">
-                        <div class="origin-item-greek">ἀρετή</div>
-                        <div class="origin-item-en">Excellence</div>
-                        <div class="origin-item-desc">The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.</div>
-                    </div>
-                    <div class="origin-item" data-idx="1">
-                        <div class="origin-item-greek">εὐδαιμονία</div>
-                        <div class="origin-item-en">Flourishing</div>
-                        <div class="origin-item-desc">Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action every day.</div>
-                    </div>
-                    <div class="origin-item" data-idx="2">
-                        <div class="origin-item-greek">φρόνησις</div>
-                        <div class="origin-item-en">Wisdom</div>
-                        <div class="origin-item-desc">Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.</div>
-                    </div>
-                </div>
-                <div class="origin-nav">
-                    <button class="origin-btn origin-prev" aria-label="Previous">‹</button>
-                    <div class="origin-dots">
-                        <span class="origin-nav-dot active" data-idx="0"></span>
-                        <span class="origin-nav-dot" data-idx="1"></span>
-                        <span class="origin-nav-dot" data-idx="2"></span>
-                    </div>
-                    <button class="origin-btn origin-next" aria-label="Next">›</button>
+                <div class="origin-zoom-overlay" id="origin-zoom-overlay">
+                    <div class="ozoom-greek"  id="ozoom-greek"></div>
+                    <div class="ozoom-en"     id="ozoom-en"></div>
+                    <div class="ozoom-desc"   id="ozoom-desc"></div>
+                    <button class="ozoom-back" id="ozoom-back">← Back to Stars</button>
                 </div>
             </div>
         </div>
@@ -1377,107 +1369,131 @@
 
 // ── ORIGIN INTERACTIVE CONSTELLATION ─────────────────────────────────
 (function () {
-    const canvas = document.getElementById('greek-canvas');
+    const canvas  = document.getElementById('greek-canvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let W, H, active = 0;
-    const ripples = [];
+    const ctx     = canvas.getContext('2d');
+    const overlay = document.getElementById('origin-zoom-overlay');
+    const oGreek  = document.getElementById('ozoom-greek');
+    const oEn     = document.getElementById('ozoom-en');
+    const oDesc   = document.getElementById('ozoom-desc');
+    const oBack   = document.getElementById('ozoom-back');
+    let W, H;
 
-    // All nodes: indices 0-2 are the 3 main interactive stars,
-    // indices 3-10 are smaller connector nodes for an organic shape
-    const nodes = [
-        // ── Main interactive nodes ──
-        { fx: 0.14, fy: 0.44, main: true  },  // 0  Excellence  — left-mid
-        { fx: 0.74, fy: 0.24, main: true  },  // 1  Flourishing — right-upper
-        { fx: 0.52, fy: 0.80, main: true  },  // 2  Wisdom      — center-lower
-        // ── Connector nodes ──
-        { fx: 0.36, fy: 0.12, main: false },  // 3  top-left arc
-        { fx: 0.62, fy: 0.38, main: false },  // 4  center
-        { fx: 0.26, fy: 0.70, main: false },  // 5  left-lower
-        { fx: 0.88, fy: 0.52, main: false },  // 6  right-mid
-        { fx: 0.05, fy: 0.86, main: false },  // 7  far bottom-left
-        { fx: 0.40, fy: 0.93, main: false },  // 8  bottom-center
-        { fx: 0.76, fy: 0.88, main: false },  // 9  bottom-right
-        { fx: 0.93, fy: 0.16, main: false },  // 10 far top-right
+    // ── Zoom state ──
+    let zoomed      = false;
+    let zoomedIdx   = -1;
+    let zScale      = 1,  zTargetScale = 1;
+    let zCx         = 0,  zCy          = 0;   // current camera center (natural coords)
+    let zTCx        = 0,  zTCy         = 0;   // target camera center
+
+    // ── 6 clickable main nodes + 6 organic connector nodes ──
+    const mainNodes = [
+        { fx:0.13, fy:0.42, greek:'ἀρετή',       en:'Excellence',   desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
+        { fx:0.74, fy:0.22, greek:'εὐδαιμονία',  en:'Flourishing',  desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
+        { fx:0.52, fy:0.82, greek:'φρόνησις',    en:'Wisdom',       desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
+        { fx:0.86, fy:0.62, greek:'ἐγκράτεια',   en:'Self-Mastery', desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
+        { fx:0.30, fy:0.14, greek:'σωφροσύνη',   en:'Temperance',   desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
+        { fx:0.44, fy:0.54, greek:'εὐθυμία',     en:'Contentment',  desc:"The quiet peace of a well-lived day. Democritus called it the highest good — the calm that comes from knowing you gave your best." },
     ];
+    // Connector (non-clickable) nodes
+    const connNodes = [
+        { fx:0.58, fy:0.10 },  // 6
+        { fx:0.63, fy:0.38 },  // 7
+        { fx:0.24, fy:0.68 },  // 8
+        { fx:0.06, fy:0.84 },  // 9
+        { fx:0.38, fy:0.94 },  // 10
+        { fx:0.78, fy:0.90 },  // 11
+    ];
+    const allNodes = [...mainNodes, ...connNodes];  // 0-5 main, 6-11 conn
 
-    // Hand-crafted organic connections — NOT a polygon
+    // Organic hand-crafted edges
     const edges = [
-        [0, 3], [3, 1], [1, 10], [10, 6], [1, 4],
-        [0, 4], [4, 2], [4, 6],  [1, 6],
-        [0, 5], [2, 5], [5, 7],  [7, 8],
-        [2, 8], [8, 9], [9, 6],  [2, 9],
-        [3, 4],
+        [0,4],[4,6],[6,1],[1,7],[7,5],[5,0],[5,2],[5,3],
+        [2,8],[8,9],[9,10],[10,2],[2,11],[11,3],[1,3],
+        [0,8],[4,7],[7,3],[6,7],
     ];
 
-    const nodeLabels = ['ἀρετή · Excellence', 'εὐδαιμονία · Flourishing', 'φρόνησις · Wisdom'];
-
-    // Ambient background stars
     const ambient = [];
     function buildAmbient() {
         ambient.length = 0;
-        for (let i = 0; i < 40; i++) {
-            ambient.push({
-                fx: Math.random(), fy: Math.random(),
-                r:  Math.random() * 1.1 + 0.25,
-                op: Math.random() * 0.22 + 0.06,
-                tw: Math.random() * Math.PI * 2,
-            });
-        }
+        for (let i = 0; i < 45; i++) ambient.push({
+            fx: Math.random(), fy: Math.random(),
+            r:  Math.random() * 1.1 + 0.25,
+            op: Math.random() * 0.20 + 0.06,
+            tw: Math.random() * Math.PI * 2,
+        });
     }
 
     function resize() {
-        W = canvas.width  = canvas.offsetWidth  || canvas.clientWidth  || 800;
-        H = canvas.height = canvas.offsetHeight || canvas.clientHeight || 320;
+        W = canvas.width  = canvas.offsetWidth  || 800;
+        H = canvas.height = canvas.offsetHeight || 420;
+        // Reset camera center on resize
+        if (!zoomed) { zCx = W/2; zCy = H/2; zTCx = W/2; zTCy = H/2; }
     }
 
-    function pos(n) { return { x: n.fx * W, y: n.fy * H }; }
+    function npos(n) { return { x: n.fx * W, y: n.fy * H }; }
     function dist(ax,ay,bx,by) { return Math.sqrt((ax-bx)**2+(ay-by)**2); }
 
-    // Content switching
-    const items   = document.querySelectorAll('.origin-item');
-    const navDots = document.querySelectorAll('.origin-nav-dot');
-
-    function goTo(idx) {
-        const next = ((idx % 3) + 3) % 3;
-        if (next === active) return;
-        items[active].classList.remove('active');
-        navDots[active].classList.remove('active');
-        active = next;
-        // Ripple from clicked star
-        const p = pos(nodes[active]);
-        ripples.push({ x: p.x, y: p.y, r: 0, op: 0.85 });
-        setTimeout(() => items[active].classList.add('active'), 100);
-        navDots[active].classList.add('active');
+    // ── Zoom in / out ──
+    function zoomIn(idx) {
+        if (zoomed) return;
+        zoomed      = true;
+        zoomedIdx   = idx;
+        zTargetScale = 3.8;
+        const p = npos(mainNodes[idx]);
+        zTCx = p.x; zTCy = p.y;
+        // Fill overlay content
+        oGreek.textContent = mainNodes[idx].greek;
+        oEn.textContent    = mainNodes[idx].en;
+        oDesc.textContent  = mainNodes[idx].desc;
+        // Show overlay after zoom settles (~700ms)
+        setTimeout(() => overlay.classList.add('visible'), 680);
     }
 
-    // Click detection on canvas
+    function zoomOut() {
+        zoomed       = false;
+        zoomedIdx    = -1;
+        zTargetScale = 1;
+        zTCx = W/2; zTCy = H/2;
+        overlay.classList.remove('visible');
+    }
+
+    oBack.addEventListener('click', zoomOut);
+
+    // Canvas click
     canvas.addEventListener('click', e => {
+        if (zoomed) return;
         const rect = canvas.getBoundingClientRect();
         const cx = (e.clientX - rect.left) * (W / rect.width);
         const cy = (e.clientY - rect.top)  * (H / rect.height);
-        nodes.forEach((n, i) => {
-            if (dist(cx, cy, pos(n).x, pos(n).y) < 32) goTo(i);
+        // Transform click to natural coords
+        const nx = (cx - W/2) / zScale + zCx;
+        const ny = (cy - H/2) / zScale + zCy;
+        mainNodes.forEach((n, i) => {
+            const p = npos(n);
+            if (dist(nx, ny, p.x, p.y) < 28) zoomIn(i);
         });
     });
     canvas.addEventListener('mousemove', e => {
+        if (zoomed) return;
         const rect = canvas.getBoundingClientRect();
         const cx = (e.clientX - rect.left) * (W / rect.width);
         const cy = (e.clientY - rect.top)  * (H / rect.height);
-        canvas.style.cursor = nodes.some(n => dist(cx, cy, pos(n).x, pos(n).y) < 32) ? 'pointer' : 'default';
+        const nx = (cx - W/2) / zScale + zCx;
+        const ny = (cy - H/2) / zScale + zCy;
+        const hit = mainNodes.some(n => { const p = npos(n); return dist(nx,ny,p.x,p.y) < 28; });
+        canvas.style.cursor = hit ? 'pointer' : 'default';
     });
 
     // Draw a 4-pointed sparkle
     function drawSparkle(x, y, r, color) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.fillStyle = color;
+        ctx.save(); ctx.translate(x, y); ctx.fillStyle = color;
         for (let a = 0; a < 4; a++) {
             ctx.rotate(Math.PI / 2);
             ctx.beginPath();
-            ctx.moveTo(0, -r * 3.0);
-            ctx.quadraticCurveTo(r * 0.28, -r * 0.28, 0, 0);
-            ctx.quadraticCurveTo(-r * 0.28, -r * 0.28, 0, -r * 3.0);
+            ctx.moveTo(0, -r*3.0);
+            ctx.quadraticCurveTo(r*0.28, -r*0.28, 0, 0);
+            ctx.quadraticCurveTo(-r*0.28, -r*0.28, 0, -r*3.0);
             ctx.fill();
         }
         ctx.restore();
@@ -1487,115 +1503,109 @@
     function draw() {
         requestAnimationFrame(draw);
         frame++;
-        ctx.clearRect(0, 0, W, H);
         const now = frame * 0.016;
 
-        // ── Edges (organic hand-crafted connections) ──
+        // Lerp zoom
+        const lerpK = 0.07;
+        zScale += (zTargetScale - zScale) * lerpK;
+        zCx    += (zTCx - zCx) * lerpK;
+        zCy    += (zTCy - zCy) * lerpK;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.save();
+        // Apply zoom transform: center on zCx,zCy
+        ctx.translate(W/2, H/2);
+        ctx.scale(zScale, zScale);
+        ctx.translate(-zCx, -zCy);
+
+        // ── Edges ──
         for (const [i, j] of edges) {
-            const a = pos(nodes[i]), b = pos(nodes[j]);
-            // Light up edges touching the active main node
-            const touchesActive = (i < 3 && i === active) || (j < 3 && j === active);
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = touchesActive
-                ? 'rgba(201,168,76,0.45)'
-                : 'rgba(201,168,76,0.13)';
-            ctx.lineWidth = touchesActive ? 1.1 : 0.6;
+            const a = npos(allNodes[i]), b = npos(allNodes[j]);
+            const mi = i < 6 ? i : -1, mj = j < 6 ? j : -1;
+            const lit = (zoomed && (mi === zoomedIdx || mj === zoomedIdx)) ||
+                        (!zoomed && (mi !== -1 || mj !== -1));
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = lit ? 'rgba(201,168,76,0.40)' : 'rgba(201,168,76,0.11)';
+            ctx.lineWidth   = lit ? 1.0 : 0.55;
             ctx.stroke();
         }
 
-        // ── Ambient background stars ──
+        // ── Ambient stars ──
         for (const s of ambient) {
             const tw = 0.8 + 0.2 * Math.sin(now + s.tw);
-            ctx.beginPath();
-            ctx.arc(s.fx * W, s.fy * H, s.r, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(201,168,76,${s.op * tw})`;
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(s.fx*W, s.fy*H, s.r, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(201,168,76,${s.op*tw})`; ctx.fill();
         }
 
-        // ── Ripples ──
-        for (let i = ripples.length - 1; i >= 0; i--) {
-            const rp = ripples[i];
-            rp.r += 3.2; rp.op -= 0.016;
-            if (rp.op <= 0) { ripples.splice(i, 1); continue; }
-            ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(201,168,76,${rp.op})`; ctx.lineWidth = 1.5; ctx.stroke();
-            if (rp.r > 18) {
-                ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r - 14, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(201,168,76,${rp.op * 0.35})`; ctx.lineWidth = 0.7; ctx.stroke();
-            }
+        // ── Connector nodes ──
+        for (let i = 6; i < allNodes.length; i++) {
+            const p = npos(allNodes[i]);
+            const lit = edges.some(([a,b]) => (a===i||b===i) && (a===zoomedIdx||b===zoomedIdx));
+            drawSparkle(p.x, p.y, lit ? 2.8 : 1.8, lit ? 'rgba(215,172,65,0.70)' : 'rgba(201,168,76,0.28)');
+            ctx.beginPath(); ctx.arc(p.x, p.y, lit ? 1.2 : 0.8, 0, Math.PI*2);
+            ctx.fillStyle = lit ? 'rgba(255,230,130,0.9)' : 'rgba(220,180,80,0.45)'; ctx.fill();
         }
 
-        // ── Connector (secondary) nodes ──
-        for (let i = 3; i < nodes.length; i++) {
-            const p = pos(nodes[i]);
-            // Check if this node touches the active main node via an edge
-            const lit = edges.some(([a, b]) => (a === i || b === i) && (a === active || b === active));
-            const r = lit ? 3.2 : 2.0;
-            // Small glow
-            if (lit) {
-                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 10);
-                grd.addColorStop(0, 'rgba(201,168,76,0.25)');
-                grd.addColorStop(1, 'rgba(201,168,76,0)');
-                ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-                ctx.fillStyle = grd; ctx.fill();
-            }
-            drawSparkle(p.x, p.y, r, lit ? 'rgba(215,172,65,0.75)' : 'rgba(201,168,76,0.30)');
-            ctx.beginPath(); ctx.arc(p.x, p.y, lit ? 1.4 : 0.9, 0, Math.PI * 2);
-            ctx.fillStyle = lit ? 'rgba(255,230,130,0.9)' : 'rgba(220,180,80,0.5)'; ctx.fill();
-        }
+        // ── Main star nodes ──
+        const labelAligns = [
+            { dx:-16, dy:-30, ta:'right'  },  // Excellence
+            { dx: 16, dy:-30, ta:'left'   },  // Flourishing
+            { dx: 16, dy: 32, ta:'left'   },  // Wisdom
+            { dx: 16, dy: 32, ta:'left'   },  // Self-Mastery
+            { dx:-16, dy:-30, ta:'right'  },  // Temperance
+            { dx: 16, dy: 32, ta:'left'   },  // Contentment
+        ];
+        for (let i = 0; i < mainNodes.length; i++) {
+            const n = mainNodes[i], p = npos(n);
+            const isZoomed = zoomed && i === zoomedIdx;
+            const pulse    = isZoomed ? (0.88 + 0.12 * Math.sin(now * 2.2)) : 1;
 
-        // ── Main interactive star nodes ──
-        for (let i = 0; i < 3; i++) {
-            const n = nodes[i], p = pos(n);
-            const isActive = i === active;
-            const pulse = isActive ? (0.88 + 0.12 * Math.sin(now * 2.2)) : 1;
+            // Glow
+            const glowR = isZoomed ? 60 * pulse : 30;
+            const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+            grd.addColorStop(0,    `rgba(201,168,76,${isZoomed ? 0.32 : 0.10})`);
+            grd.addColorStop(0.5,  `rgba(201,168,76,${isZoomed ? 0.08 : 0.02})`);
+            grd.addColorStop(1,    'rgba(201,168,76,0)');
+            ctx.beginPath(); ctx.arc(p.x, p.y, glowR, 0, Math.PI*2);
+            ctx.fillStyle = grd; ctx.fill();
 
-            // Outer glow
-            if (isActive) {
-                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 58 * pulse);
-                grd.addColorStop(0,    'rgba(201,168,76,0.30)');
-                grd.addColorStop(0.42, 'rgba(201,168,76,0.08)');
-                grd.addColorStop(1,    'rgba(201,168,76,0)');
-                ctx.beginPath(); ctx.arc(p.x, p.y, 58 * pulse, 0, Math.PI * 2);
-                ctx.fillStyle = grd; ctx.fill();
-            }
+            // Ring
+            ctx.beginPath(); ctx.arc(p.x, p.y, isZoomed ? 20*pulse : 13, 0, Math.PI*2);
+            ctx.strokeStyle = isZoomed ? 'rgba(201,168,76,0.90)' : 'rgba(201,168,76,0.32)';
+            ctx.lineWidth = isZoomed ? 1.5 : 0.9; ctx.stroke();
 
-            // Outer ring
-            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 22 : 14, 0, Math.PI * 2);
-            ctx.strokeStyle = isActive ? 'rgba(201,168,76,0.88)' : 'rgba(201,168,76,0.30)';
-            ctx.lineWidth = isActive ? 1.5 : 0.9; ctx.stroke();
-
-            // Inner halo (active only)
-            if (isActive) {
-                ctx.beginPath(); ctx.arc(p.x, p.y, 30 * pulse, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(201,168,76,0.12)'; ctx.lineWidth = 0.6; ctx.stroke();
+            // Second halo on zoomed
+            if (isZoomed) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 28*pulse, 0, Math.PI*2);
+                ctx.strokeStyle = 'rgba(201,168,76,0.14)'; ctx.lineWidth = 0.7; ctx.stroke();
             }
 
             // Sparkle
-            const sr = isActive ? 7 * pulse : 4.2;
-            drawSparkle(p.x, p.y, sr, isActive ? 'rgba(235,190,80,0.97)' : 'rgba(201,168,76,0.50)');
+            drawSparkle(p.x, p.y,
+                isZoomed ? 7*pulse : 4.0,
+                isZoomed ? 'rgba(235,190,80,0.97)' : 'rgba(201,168,76,0.52)');
 
             // Core
-            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 3.4 * pulse : 2.0, 0, Math.PI * 2);
-            ctx.fillStyle = isActive ? 'rgba(255,242,165,1)' : 'rgba(230,185,75,0.65)'; ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x, p.y, isZoomed ? 3.2*pulse : 2.0, 0, Math.PI*2);
+            ctx.fillStyle = isZoomed ? 'rgba(255,242,165,1)' : 'rgba(230,185,75,0.68)'; ctx.fill();
 
-            // Label — position so it doesn't overlap edges
-            const labelOffsets = [{ dx: -14, dy: -32 }, { dx: 10, dy: -32 }, { dx: 10, dy: 32 }];
-            const lo = labelOffsets[i];
-            ctx.font = isActive ? '600 11px Inter,sans-serif' : '400 10px Inter,sans-serif';
-            ctx.fillStyle = isActive ? 'rgba(201,168,76,0.95)' : 'rgba(201,168,76,0.40)';
-            ctx.textAlign = i === 0 ? 'right' : 'left';
-            ctx.fillText(nodeLabels[i], p.x + lo.dx, p.y + lo.dy);
+            // Label (hidden when fully zoomed in so overlay takes over)
+            if (zScale < 2.8) {
+                const lo = labelAligns[i];
+                const alpha = Math.max(0, Math.min(1, (2.8 - zScale) / 1.5));
+                ctx.font = `${isZoomed?'600':'400'} 10px Inter,sans-serif`;
+                ctx.fillStyle = `rgba(201,168,76,${(isZoomed ? 0.95 : 0.38) * alpha})`;
+                ctx.textAlign = lo.ta;
+                ctx.fillText(`${n.greek} · ${n.en}`, p.x + lo.dx, p.y + lo.dy);
+            }
         }
+
+        ctx.restore();
     }
 
-    // Nav buttons
-    document.querySelector('.origin-prev')?.addEventListener('click', () => goTo(active - 1));
-    document.querySelector('.origin-next')?.addEventListener('click', () => goTo(active + 1));
-    navDots.forEach(d => d.addEventListener('click', () => goTo(+d.dataset.idx)));
-
     resize();
+    // Init camera center
+    zCx = W/2; zCy = H/2; zTCx = W/2; zTCy = H/2;
     buildAmbient();
     draw();
     window.addEventListener('resize', () => { resize(); buildAmbient(); });
@@ -2002,6 +2012,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
