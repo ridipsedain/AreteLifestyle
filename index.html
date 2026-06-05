@@ -1385,7 +1385,7 @@
 })();
 
 
-// ── ORIGIN: HERCULES CONSTELLATION (pan · zoom · click) ───────────────
+// ── ORIGIN: HERCULES CONSTELLATION ────────────────────────────────────
 (function () {
     const canvas  = document.getElementById('greek-canvas');
     if (!canvas) return;
@@ -1397,102 +1397,93 @@
     const oBack   = document.getElementById('ozoom-back');
     let W, H;
 
-    // ── Camera ──
-    // cam.x/y = natural-space center being viewed; cam.scale = zoom
-    const cam = { x:450, y:400, scale:0.72, tx:450, ty:400, ts:0.72 };
-    const MIN_SCALE = 0.38, MAX_SCALE = 3.2;
-
-    // ── Star-click zoom state ──
-    let starZoomed = false, starIdx = -1;
-    let preCamX, preCamY, preCamS;   // saved camera before star-zoom
+    const cam = { x:413, y:384, scale:1, tx:413, ty:384, ts:1 };
+    const MIN_SCALE = 0.35, MAX_SCALE = 3.5;
+    let starZoomed = false, starIdx = -1, preCamX, preCamY, preCamS;
 
     // ── HERCULES constellation ──
-    // Natural space: 900 × 780. Stars placed to resemble the actual Heracles
-    // constellation — associated with the 12 Labors, strength & excellence.
-    // Main nodes (0-5) are clickable; connector nodes (6-18) shape the figure.
-    const mainNodes = [
-        { x:450, y: 55, greek:'ἀρετή',      en:'Excellence',   desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
-        { x:832, y:122, greek:'εὐδαιμονία', en:'Flourishing',  desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
-        { x: 72, y:162, greek:'φρόνησις',   en:'Wisdom',       desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
-        { x:452, y:352, greek:'ἐγκράτεια',  en:'Self-Mastery', desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
-        { x:242, y:695, greek:'σωφροσύνη',  en:'Temperance',   desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
-        { x:668, y:672, greek:'εὐθυμία',    en:'Contentment',  desc:"The quiet peace of a well-lived day. Democritus called it the highest good — the calm that comes from knowing you gave your best." },
+    // Star positions derived from actual catalog data for the Heracles/Hercules
+    // constellation, rescaled to fill natural space ~850 × 720.
+    // 9 main clickable stars + 8 connector nodes. Rendering order:
+    //   ambient → edges → labels → star-rings/sparkles (stars always on top).
+    // ── 9 clickable main nodes — actual Hercules catalog positions rescaled ──
+    const M = [
+        { x:307,y:372, greek:'ἀρετή',         en:'Excellence',       desc:'The full expression of your potential through daily practice. Not a single act — a way of being that compounds over time.' },
+        { x:297,y:229, greek:'εὐδαιμονία',    en:'Flourishing',      desc:'Living well and doing well. The outcome of sustained excellence — not happiness chased, but earned through right action.' },
+        { x:183,y: 75, greek:'φρόνησις',      en:'Wisdom',           desc:'Practical wisdom. Knowing what to do and when — the faculty that transforms knowledge into right action at the right moment.' },
+        { x:394,y:387, greek:'ἐγκράτεια',     en:'Self-Mastery',     desc:'The discipline to act by your values, not your impulses. The ancient Greeks saw self-mastery as the foundation of all freedom.' },
+        { x:462,y:239, greek:'σωφροσύνη',     en:'Temperance',       desc:'Balance in all things. Not abstinence — right proportion. Knowing when enough is exactly enough to keep momentum alive.' },
+        { x:749,y:253, greek:'εὐθυμία',       en:'Contentment',      desc:"The quiet peace of a well-lived day. The calm that comes from knowing you gave your best — not despite your effort, because of it." },
+        { x:463,y:692, greek:'ἀνδρεία',       en:'Courage',          desc:'The willingness to act in spite of fear. Aristotle called it the first virtue — without courage, all others remain aspirations.' },
+        { x:251,y:565, greek:'εὐψυχία',       en:'Fortitude',        desc:'Steadfastness under difficulty. Not the absence of hardship, but the strength to hold your line when it would be easy to quit.' },
+        { x:699,y:439, greek:'μεγαλοψυχία',   en:'Greatness of Soul',desc:'Magnanimity — the aspiration toward the highest things. The belief that you are capable of something worth striving for.' },
     ];
-    // Connector (non-clickable) body nodes — shape of Hercules figure
-    const connNodes = [
-        { x:440, y:138 },  //  6 neck
-        { x:318, y:192 },  //  7 left shoulder
-        { x:574, y:175 },  //  8 right shoulder
-        { x:194, y:260 },  //  9 left elbow
-        { x:690, y:240 },  // 10 right elbow
-        { x:375, y:285 },  // 11 keystone top-left
-        { x:532, y:268 },  // 12 keystone top-right
-        { x:365, y:422 },  // 13 keystone bottom-left
-        { x:528, y:405 },  // 14 keystone bottom-right
-        { x:348, y:492 },  // 15 left hip
-        { x:554, y:472 },  // 16 right hip
-        { x:298, y:582 },  // 17 left knee
-        { x:598, y:562 },  // 18 right knee
+    // 8 connector (non-clickable) nodes — fill the Hercules figure
+    const C = [
+        { x:462,y:502 }, // 9  δ Her
+        { x:194,y:607 }, // 10 γ Her
+        { x: 75,y:625 }, // 11 κ Her
+        { x:628,y: 82 }, // 12 ι Her
+        { x:260,y:157 }, // 13 σ Her
+        { x:515,y:251 }, // 14 ρ Her
+        { x:751,y:417 }, // 15 ξ Her
+        { x: 75,y:107 }, // 16 φ Her
     ];
-    const all = [...mainNodes, ...connNodes];
+    const all = [...M, ...C]; // indices 0-8 = main, 9-16 = connectors
 
-    // Edges — Hercules figure skeleton
+    // Edges (based on actual Hercules star connectivity)
     const edges = [
-        [0,6],[6,7],[6,8],           // head → shoulders
-        [7,9],[9,2],                  // left arm
-        [8,10],[10,1],                // right arm
-        [7,11],[8,12],                // shoulders → keystone top
-        [11,12],                      // keystone top bar
-        [11,13],[12,14],              // keystone sides
-        [13,14],                      // keystone bottom bar
-        [13,15],[14,16],              // hips
-        [15,17],[16,18],              // knees
-        [17,4],[18,5],                // feet
+        // Keystone (central torso quadrilateral — most famous part of Hercules)
+        [0,1],[1,4],[4,3],[3,0],
+        // Left arm (η→σ→τ, σ→φ)
+        [1,13],[13,2],[13,16],
+        // Right arm (π→ρ→θ, θ→ι)
+        [4,14],[14,5],[5,12],
+        // Lower body — left leg (ζ→β→γ→κ)
+        [0,7],[7,10],[10,11],
+        // Lower body — right leg (ε→δ→α)
+        [3,9],[9,6],
+        // Side connections (ε→μ→ξ, δ→ξ)
+        [3,8],[8,15],[9,15],
+        // Extra cross-connection
+        [5,8],
     ];
 
-    // Ambient background stars (in natural 900×780 space)
     const ambient = [];
     function buildAmbient() {
         ambient.length = 0;
-        for (let i = 0; i < 55; i++) ambient.push({
-            x: Math.random() * 900, y: Math.random() * 780,
-            r: Math.random() * 1.0 + 0.22,
-            op: Math.random() * 0.18 + 0.05,
-            tw: Math.random() * Math.PI * 2,
+        for (let i = 0; i < 60; i++) ambient.push({
+            x: Math.random()*820+15, y: Math.random()*710+15,
+            r: Math.random()*1.0+0.2, op: Math.random()*0.16+0.04,
+            tw: Math.random()*Math.PI*2,
         });
     }
 
-    // ── Utilities ──
     function resize() {
-        W = canvas.width  = canvas.offsetWidth  || 800;
+        W = canvas.width  = canvas.offsetWidth  || 860;
         H = canvas.height = canvas.offsetHeight || 520;
-        fitView();
+        if (!starZoomed) fitView();
     }
     function fitView() {
-        if (starZoomed) return;
-        cam.tx = 450; cam.ty = 390;
-        cam.ts = Math.min(W / 960, H / 830) * 0.88;
+        // Spread all 17 nodes across ~676×617 natural space; center at (413,384)
+        const padding = 70;
+        cam.tx = 413; cam.ty = 384;
+        cam.ts = Math.min((W - padding*2) / 676, (H - padding*2) / 617);
     }
-    function toScreen(nx, ny) {
-        return { x:(nx - cam.x)*cam.scale + W/2, y:(ny - cam.y)*cam.scale + H/2 };
-    }
-    function toNatural(sx, sy) {
-        return { x:(sx - W/2)/cam.scale + cam.x, y:(sy - H/2)/cam.scale + cam.y };
-    }
+    function toNat(sx,sy){ return { x:(sx-W/2)/cam.scale+cam.x, y:(sy-H/2)/cam.scale+cam.y }; }
     function dist(ax,ay,bx,by){ return Math.sqrt((ax-bx)**2+(ay-by)**2); }
 
-    // ── Star-click zoom ──
+    // ── Star-zoom ──
     function zoomToStar(idx) {
         if (starZoomed) return;
         starZoomed = true; starIdx = idx;
         preCamX = cam.tx; preCamY = cam.ty; preCamS = cam.ts;
-        cam.tx = mainNodes[idx].x;
-        cam.ty = mainNodes[idx].y;
-        cam.ts = Math.min(MAX_SCALE, cam.scale * 3.2);
-        oGreek.textContent = mainNodes[idx].greek;
-        oEn.textContent    = mainNodes[idx].en;
-        oDesc.textContent  = mainNodes[idx].desc;
-        setTimeout(() => overlay.classList.add('visible'), 700);
+        cam.tx = M[idx].x; cam.ty = M[idx].y;
+        cam.ts = Math.min(MAX_SCALE, Math.max(cam.scale, 0.9) * 3.4);
+        oGreek.textContent = M[idx].greek;
+        oEn.textContent    = M[idx].en;
+        oDesc.textContent  = M[idx].desc;
+        setTimeout(() => overlay.classList.add('visible'), 720);
     }
     function zoomOutStar() {
         starZoomed = false; starIdx = -1;
@@ -1501,238 +1492,198 @@
     }
     oBack.addEventListener('click', zoomOutStar);
 
-    // ── Pan with drag ──
+    // ── Pan ──
     const drag = { on:false, sx:0, sy:0, ox:0, oy:0 };
+    let moved = false;
     canvas.addEventListener('mousedown', e => {
         if (starZoomed) return;
-        drag.on = true; drag.sx = e.clientX; drag.sy = e.clientY;
-        drag.ox = cam.tx; drag.oy = cam.ty;
-        canvas.style.cursor = 'grabbing';
+        drag.on=true; moved=false;
+        drag.sx=e.clientX; drag.sy=e.clientY;
+        drag.ox=cam.tx; drag.oy=cam.ty;
+        canvas.style.cursor='grabbing';
     });
     window.addEventListener('mousemove', e => {
         if (!drag.on) return;
-        const dx = (e.clientX - drag.sx) / cam.scale;
-        const dy = (e.clientY - drag.sy) / cam.scale;
-        cam.tx = drag.ox - dx; cam.ty = drag.oy - dy;
+        const dx=(e.clientX-drag.sx)/cam.scale, dy=(e.clientY-drag.sy)/cam.scale;
+        if (Math.abs(dx)>3||Math.abs(dy)>3) moved=true;
+        cam.tx=drag.ox-dx; cam.ty=drag.oy-dy;
     });
-    window.addEventListener('mouseup', () => {
-        if (!drag.on) return;
-        drag.on = false;
-        canvas.style.cursor = starZoomed ? 'default' : 'grab';
-    });
+    window.addEventListener('mouseup', () => { drag.on=false; canvas.style.cursor=starZoomed?'default':'grab'; });
 
-    // Touch pan
-    let touch0 = null;
-    canvas.addEventListener('touchstart', e => {
-        if (starZoomed || e.touches.length !== 1) return;
-        touch0 = { x:e.touches[0].clientX, y:e.touches[0].clientY, ox:cam.tx, oy:cam.ty };
-    }, { passive:true });
-    canvas.addEventListener('touchmove', e => {
-        if (!touch0 || e.touches.length !== 1) return;
-        const dx = (e.touches[0].clientX - touch0.x) / cam.scale;
-        const dy = (e.touches[0].clientY - touch0.y) / cam.scale;
-        cam.tx = touch0.ox - dx; cam.ty = touch0.oy - dy;
-    }, { passive:true });
-    canvas.addEventListener('touchend', () => { touch0 = null; });
+    // Touch
+    let t0=null;
+    canvas.addEventListener('touchstart',e=>{ if(starZoomed||e.touches.length!==1)return; t0={x:e.touches[0].clientX,y:e.touches[0].clientY,ox:cam.tx,oy:cam.ty}; },{passive:true});
+    canvas.addEventListener('touchmove',e=>{ if(!t0||e.touches.length!==1)return; cam.tx=t0.ox-(e.touches[0].clientX-t0.x)/cam.scale; cam.ty=t0.oy-(e.touches[0].clientY-t0.y)/cam.scale; },{passive:true});
+    canvas.addEventListener('touchend',()=>{ t0=null; });
 
-    // ── Scroll to zoom ──
-    canvas.addEventListener('wheel', e => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 0.91;
-        cam.ts = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.ts * factor));
-    }, { passive:false });
+    // Scroll zoom
+    canvas.addEventListener('wheel',e=>{ e.preventDefault(); cam.ts=Math.max(MIN_SCALE,Math.min(MAX_SCALE,cam.ts*(e.deltaY<0?1.12:0.9))); },{passive:false});
+    document.getElementById('origin-zoom-in') ?.addEventListener('click',()=>{ cam.ts=Math.min(MAX_SCALE,cam.ts*1.28); });
+    document.getElementById('origin-zoom-out')?.addEventListener('click',()=>{ cam.ts=Math.max(MIN_SCALE,cam.ts*0.78); });
 
-    // +/- buttons
-    document.getElementById('origin-zoom-in') ?.addEventListener('click', () => {
-        cam.ts = Math.min(MAX_SCALE, cam.ts * 1.25);
-    });
-    document.getElementById('origin-zoom-out')?.addEventListener('click', () => {
-        cam.ts = Math.max(MIN_SCALE, cam.ts * 0.8);
-    });
-
-    // ── Click on canvas (select star) ──
-    let mouseMovedSince = false;
-    canvas.addEventListener('mousedown', () => { mouseMovedSince = false; });
-    window.addEventListener('mousemove', () => { if (drag.on) mouseMovedSince = true; });
+    // Click to select star
     canvas.addEventListener('click', e => {
-        if (starZoomed || mouseMovedSince) return;
+        if (starZoomed || moved) return;
         const rect = canvas.getBoundingClientRect();
-        const n = toNatural(
-            (e.clientX - rect.left) * (W / rect.width),
-            (e.clientY - rect.top)  * (H / rect.height)
-        );
-        let hit = -1, bestD = 30 / cam.scale;
-        mainNodes.forEach((mn, i) => {
-            const d = dist(n.x, n.y, mn.x, mn.y);
-            if (d < bestD) { bestD = d; hit = i; }
-        });
-        if (hit >= 0) zoomToStar(hit);
+        const n = toNat((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
+        let hit=-1, best=36/cam.scale;
+        M.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<best){best=d;hit=i;} });
+        if (hit>=0) zoomToStar(hit);
     });
 
-    // Hover cursor
+    // Hover
+    let hovIdx=-1;
     canvas.addEventListener('mousemove', e => {
-        if (drag.on || starZoomed) return;
-        const rect = canvas.getBoundingClientRect();
-        const n = toNatural(
-            (e.clientX - rect.left) * (W / rect.width),
-            (e.clientY - rect.top)  * (H / rect.height)
-        );
-        const hit = mainNodes.some(mn => dist(n.x,n.y,mn.x,mn.y) < 30/cam.scale);
-        canvas.style.cursor = hit ? 'pointer' : 'grab';
+        if (drag.on||starZoomed){ hovIdx=-1; return; }
+        const rect=canvas.getBoundingClientRect();
+        const n=toNat((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
+        let best=-1, bd=36/cam.scale;
+        M.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<bd){bd=d;best=i;} });
+        hovIdx=best;
+        canvas.style.cursor=(best>=0)?'pointer':'grab';
     });
 
-    // ── Draw ──
-    function drawSparkle(x, y, r, color) {
-        ctx.save(); ctx.translate(x, y); ctx.fillStyle = color;
-        for (let a = 0; a < 4; a++) {
-            ctx.rotate(Math.PI / 2);
+    // ── Draw sparkle ──
+    function sparkle(x,y,r,col) {
+        ctx.save(); ctx.translate(x,y); ctx.fillStyle=col;
+        for(let a=0;a<4;a++){
+            ctx.rotate(Math.PI/2);
             ctx.beginPath();
-            ctx.moveTo(0, -r*3.2);
-            ctx.quadraticCurveTo(r*0.28,-r*0.28, 0,0);
-            ctx.quadraticCurveTo(-r*0.28,-r*0.28, 0,-r*3.2);
+            ctx.moveTo(0,-r*3.2);
+            ctx.quadraticCurveTo(r*0.3,-r*0.3,0,0);
+            ctx.quadraticCurveTo(-r*0.3,-r*0.3,0,-r*3.2);
             ctx.fill();
         }
         ctx.restore();
     }
 
-    let frame = 0, hoveredIdx = -1;
-    // Track hover for glow highlight
-    canvas.addEventListener('mousemove', e => {
-        if (drag.on || starZoomed) { hoveredIdx = -1; return; }
-        const rect = canvas.getBoundingClientRect();
-        const n = toNatural((e.clientX-rect.left)*(W/rect.width),(e.clientY-rect.top)*(H/rect.height));
-        let best = -1, bestD = 34/cam.scale;
-        mainNodes.forEach((mn,i)=>{ const d=dist(n.x,n.y,mn.x,mn.y); if(d<bestD){bestD=d;best=i;} });
-        hoveredIdx = best;
-    });
+    // Label offsets for each main node (keep labels from overlapping edges)
+    const LO = [
+        {dx:-16,dy:-30,ta:'right'}, // 0 ζ (keystone BL)
+        {dx:-16,dy:-28,ta:'right'}, // 1 η (keystone TL)
+        {dx:-14,dy:-22,ta:'right'}, // 2 τ (top left)
+        {dx: 16,dy: 28,ta:'left' }, // 3 ε (keystone BR)
+        {dx: 16,dy:-28,ta:'left' }, // 4 π (keystone TR)
+        {dx: 16,dy:-26,ta:'left' }, // 5 θ (right arm)
+        {dx: 16,dy: 28,ta:'left' }, // 6 α (bottom)
+        {dx:-16,dy: 28,ta:'right'}, // 7 β (lower left)
+        {dx: 16,dy: 26,ta:'left' }, // 8 μ (lower right)
+    ];
 
+    let fr=0;
     function draw() {
         requestAnimationFrame(draw);
-        frame++;
-        const now = frame * 0.016;
-
-        // Lerp camera
-        const k = 0.072;
-        cam.scale += (cam.ts - cam.scale) * k;
-        cam.x     += (cam.tx - cam.x)     * k;
-        cam.y     += (cam.ty - cam.y)     * k;
+        fr++;
+        const now=fr*0.016;
+        const k=0.075;
+        cam.scale+=(cam.ts-cam.scale)*k;
+        cam.x+=(cam.tx-cam.x)*k;
+        cam.y+=(cam.ty-cam.y)*k;
 
         ctx.clearRect(0,0,W,H);
+        ctx.save(); ctx.rect(0,0,W,H); ctx.clip();   // clip
+        ctx.save();                                    // camera
+        ctx.translate(W/2,H/2);
+        ctx.scale(cam.scale,cam.scale);
+        ctx.translate(-cam.x,-cam.y);
 
-        // Clip to canvas bounds
-        ctx.save();
-        ctx.rect(0,0,W,H); ctx.clip();
-
-        // Apply camera transform
-        ctx.save();
-        ctx.translate(W/2, H/2);
-        ctx.scale(cam.scale, cam.scale);
-        ctx.translate(-cam.x, -cam.y);
-
-        // ── Ambient stars ──
-        for (const s of ambient) {
-            const tw = 0.82 + 0.18 * Math.sin(now + s.tw);
-            const p  = toScreen(s.x, s.y);
-            ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-            ctx.fillStyle = `rgba(201,168,76,${s.op*tw})`; ctx.fill();
+        // PASS 1 — ambient + edges + connector dots (all behind labels & stars)
+        for(const s of ambient){
+            const tw=0.8+0.2*Math.sin(now+s.tw);
+            ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+            ctx.fillStyle=`rgba(201,168,76,${s.op*tw})`; ctx.fill();
         }
-
-        // ── Constellation edges ──
-        for (const [i,j] of edges) {
-            const a = all[i], b = all[j];
-            const mi = i<6?i:-1, mj = j<6?j:-1;
-            const lit = (starZoomed && (mi===starIdx||mj===starIdx)) ||
-                        (!starZoomed && (hoveredIdx>=0) && (mi===hoveredIdx||mj===hoveredIdx));
+        for(const [i,j] of edges){
+            const a=all[i],b=all[j];
+            const mi=i<9?i:-1, mj=j<9?j:-1;
+            const lit=(starZoomed&&(mi===starIdx||mj===starIdx))||
+                      (!starZoomed&&hovIdx>=0&&(mi===hovIdx||mj===hovIdx));
             ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-            ctx.strokeStyle = lit ? 'rgba(201,168,76,0.55)' : 'rgba(201,168,76,0.22)';
-            ctx.lineWidth   = lit ? 1.2 / cam.scale : 0.7 / cam.scale;
-            ctx.stroke();
+            ctx.strokeStyle=lit?'rgba(201,168,76,0.58)':'rgba(201,168,76,0.20)';
+            ctx.lineWidth=lit?1.1:0.65; ctx.stroke();
+        }
+        for(let i=9;i<all.length;i++){
+            const n=all[i];
+            const lit=edges.some(([a,b])=>(a===i||b===i)&&
+                ((starZoomed&&(a===starIdx||b===starIdx))||(!starZoomed&&hovIdx>=0&&(a===hovIdx||b===hovIdx))));
+            sparkle(n.x,n.y,lit?2.6:1.7,lit?'rgba(215,172,65,0.68)':'rgba(201,168,76,0.26)');
+            ctx.beginPath(); ctx.arc(n.x,n.y,lit?1.2:0.8,0,Math.PI*2);
+            ctx.fillStyle=lit?'rgba(255,230,130,0.88)':'rgba(220,180,80,0.44)'; ctx.fill();
         }
 
-        // ── Connector nodes ──
-        for (let i=6; i<all.length; i++) {
-            const n = all[i];
-            const lit = edges.some(([a,b])=>(a===i||b===i)&&((starZoomed&&(a===starIdx||b===starIdx))||(hoveredIdx>=0&&(a===hoveredIdx||b===hoveredIdx))));
-            drawSparkle(n.x, n.y, lit ? 2.4 : 1.6, lit ? 'rgba(215,172,65,0.65)' : 'rgba(201,168,76,0.25)');
-            ctx.beginPath(); ctx.arc(n.x,n.y, lit?1.1:0.75, 0,Math.PI*2);
-            ctx.fillStyle = lit ? 'rgba(255,230,130,0.85)' : 'rgba(220,180,80,0.42)'; ctx.fill();
+        // PASS 2 — labels (drawn BEFORE sparkles so stars appear on top of text)
+        const lAlpha=Math.max(0,Math.min(1,(2.6-cam.scale)/1.4));
+        if(lAlpha>0.03){
+            for(let i=0;i<M.length;i++){
+                const n=M[i], lo=LO[i];
+                const isActive=starZoomed&&i===starIdx, isHov=!starZoomed&&i===hovIdx;
+                const baseA=isActive?.85:isHov?.70:.38;
+                ctx.font=`${isHov||isActive?'600':'400'} 10px Inter,sans-serif`;
+                ctx.fillStyle=`rgba(201,168,76,${baseA*lAlpha})`;
+                ctx.textAlign=lo.ta;
+                ctx.fillText(`${n.greek} · ${n.en}`,n.x+lo.dx,n.y+lo.dy);
+                // "click" hint on hover
+                if(isHov&&lAlpha>0.5){
+                    ctx.font='400 9px Inter,sans-serif';
+                    ctx.fillStyle=`rgba(201,168,76,${0.45*lAlpha})`;
+                    ctx.fillText('tap to explore',n.x+lo.dx,n.y+lo.dy+(lo.dy<0?-13:13));
+                }
+            }
         }
 
-        // ── Main clickable star nodes ──
-        const labelOf = [
-            {dx:-14,dy:-28,ta:'right'},   // 0 Excellence
-            {dx: 14,dy:-28,ta:'left' },   // 1 Flourishing
-            {dx: 14,dy: 28,ta:'left' },   // 2 Wisdom
-            {dx: 14,dy: 28,ta:'left' },   // 3 Self-Mastery
-            {dx:-14,dy:-28,ta:'right'},   // 4 Temperance
-            {dx: 14,dy: 28,ta:'left' },   // 5 Contentment
-        ];
-        for (let i=0; i<mainNodes.length; i++) {
-            const n = mainNodes[i];
-            const isStar = starZoomed && i === starIdx;
-            const isHov  = !starZoomed && i === hoveredIdx;
-            const pulse  = (isStar||isHov) ? (0.86 + 0.14*Math.sin(now*2.4)) : (0.92 + 0.08*Math.sin(now*1.2 + i));
+        // PASS 3 — main star glows + rings + sparkles (always on top)
+        for(let i=0;i<M.length;i++){
+            const n=M[i];
+            const isStar=starZoomed&&i===starIdx, isHov=!starZoomed&&i===hovIdx;
+            const pulse=(isStar||isHov)?(0.85+0.15*Math.sin(now*2.4)):(0.9+0.1*Math.sin(now*0.9+i*1.1));
 
-            // Glow
-            const glowR = isStar ? 58*pulse : isHov ? 40*pulse : 22;
-            const grd = ctx.createRadialGradient(n.x,n.y,0, n.x,n.y,glowR);
-            grd.addColorStop(0,   `rgba(201,168,76,${isStar?.30:isHov?.22:.08})`);
-            grd.addColorStop(0.5, `rgba(201,168,76,${isStar?.07:isHov?.05:.01})`);
-            grd.addColorStop(1,   'rgba(201,168,76,0)');
-            ctx.beginPath(); ctx.arc(n.x,n.y,glowR,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+            // Outer ambient glow (always present on main stars)
+            const gr=isStar?62*pulse:isHov?44*pulse:28;
+            const grd=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,gr);
+            grd.addColorStop(0,`rgba(201,168,76,${isStar?.32:isHov?.24:.10})`);
+            grd.addColorStop(0.5,`rgba(201,168,76,${isStar?.08:isHov?.05:.02})`);
+            grd.addColorStop(1,'rgba(201,168,76,0)');
+            ctx.beginPath(); ctx.arc(n.x,n.y,gr,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
 
-            // Outer ring
-            ctx.beginPath(); ctx.arc(n.x,n.y, isStar?20*pulse:isHov?15:11, 0,Math.PI*2);
-            ctx.strokeStyle = isStar?'rgba(201,168,76,.90)':isHov?'rgba(201,168,76,.70)':'rgba(201,168,76,.35)';
-            ctx.lineWidth = (isStar?1.5:isHov?1.2:0.8) / cam.scale * cam.scale;
-            ctx.lineWidth = isStar?1.5:isHov?1.2:0.8;
-            ctx.stroke();
-
-            // Halo (star-zoomed)
-            if (isStar) {
-                ctx.beginPath(); ctx.arc(n.x,n.y,28*pulse,0,Math.PI*2);
-                ctx.strokeStyle='rgba(201,168,76,0.13)'; ctx.lineWidth=0.7; ctx.stroke();
+            // Ring
+            ctx.beginPath(); ctx.arc(n.x,n.y,isStar?22*pulse:isHov?16:12,0,Math.PI*2);
+            ctx.strokeStyle=isStar?'rgba(201,168,76,.92)':isHov?'rgba(201,168,76,.72)':'rgba(201,168,76,.38)';
+            ctx.lineWidth=isStar?1.6:isHov?1.2:0.85; ctx.stroke();
+            if(isStar){
+                ctx.beginPath(); ctx.arc(n.x,n.y,30*pulse,0,Math.PI*2);
+                ctx.strokeStyle='rgba(201,168,76,0.14)'; ctx.lineWidth=0.7; ctx.stroke();
             }
 
-            // Sparkle
-            drawSparkle(n.x, n.y,
-                isStar?7*pulse:isHov?5.5*pulse:3.8*pulse,
-                isStar?'rgba(235,190,80,.97)':isHov?'rgba(220,178,70,.85)':'rgba(201,168,76,.55)');
+            // Sparkle (drawn on top of labels)
+            sparkle(n.x,n.y,
+                isStar?7.5*pulse:isHov?6*pulse:4.2*pulse,
+                isStar?'rgba(240,195,85,.98)':isHov?'rgba(225,182,72,.88)':'rgba(201,168,76,.58)');
 
             // Core
-            ctx.beginPath(); ctx.arc(n.x,n.y, isStar?3.2*pulse:isHov?2.4:1.9, 0,Math.PI*2);
-            ctx.fillStyle = isStar?'rgba(255,242,165,1)':isHov?'rgba(250,225,130,1)':'rgba(230,185,75,.72)'; ctx.fill();
-
-            // Label — fade out when deeply zoomed in (overlay takes over)
-            const labelAlpha = Math.max(0, Math.min(1, (2.4 - cam.scale)/1.2));
-            if (labelAlpha > 0.02) {
-                const lo = labelOf[i];
-                ctx.font      = `${isHov||isStar?'600':'400'} ${Math.round(10/cam.scale*Math.min(cam.scale,1.2))}px Inter,sans-serif`;
-                ctx.fillStyle = `rgba(201,168,76,${(isStar?.88:isHov?.72:.42)*labelAlpha})`;
-                ctx.textAlign = lo.ta;
-                // Label above head or below feet; sides for others
-                ctx.fillText(`${n.greek} · ${n.en}`, n.x+lo.dx, n.y+lo.dy);
-            }
+            ctx.beginPath(); ctx.arc(n.x,n.y,isStar?3.5*pulse:isHov?2.6:2.1,0,Math.PI*2);
+            ctx.fillStyle=isStar?'rgba(255,245,170,1)':isHov?'rgba(252,228,135,1)':'rgba(230,185,75,.75)'; ctx.fill();
         }
 
-        ctx.restore(); // camera transform
+        ctx.restore(); // camera
 
-        // ── Canvas-space UI: hint text ──
-        if (!starZoomed && cam.scale < 1.8) {
-            const alpha = Math.min(1, (1.8 - cam.scale) / 0.6);
-            ctx.font = `400 11px Inter,sans-serif`;
-            ctx.fillStyle = `rgba(201,168,76,${0.38 * alpha})`;
-            ctx.textAlign = 'center';
-            ctx.fillText('HERCULES · Drag to explore  ·  Click a golden star', W/2, H - 16);
+        // ── HUD: hint text (canvas space, not affected by camera) ──
+        if(!starZoomed&&cam.scale<1.6){
+            const a=Math.min(1,(1.6-cam.scale)/0.7);
+            ctx.font='400 11px Inter,sans-serif';
+            ctx.fillStyle=`rgba(201,168,76,${0.42*a})`;
+            ctx.textAlign='center';
+            ctx.fillText('HERCULES  ·  drag to explore  ·  click a star ✦',W/2,H-14);
         }
 
         ctx.restore(); // clip
     }
 
     resize();
+    // Sync current camera instantly on first frame
+    cam.x=cam.tx; cam.y=cam.ty; cam.scale=cam.ts;
     buildAmbient();
     draw();
-    window.addEventListener('resize', () => { resize(); buildAmbient(); });
+    window.addEventListener('resize',()=>{ resize(); buildAmbient(); });
 })();
 
 
@@ -2136,6 +2087,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
