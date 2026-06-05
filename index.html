@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1394,12 +1394,14 @@
     const oDesc   = document.getElementById('ozoom-desc');
     const oBack   = document.getElementById('ozoom-back');
     let W = 900, H = 520;
+    let MIN_SCALE = 0.8, MAX_SCALE = 5.5;
+    let cameraReady = false;
 
-    /* Camera */
-    const cam = { cx:.5, cy:.5, scale:.9, tcx:.5, tcy:.5, ts:.9 };
+    /* Camera: cx/cy = fractional center, scale = zoom multiplier */
+    const cam = { cx:.5, cy:.5, scale:1, tcx:.5, tcy:.5, ts:1 };
     let starZoomed = false, starIdx = -1, preCx, preCy, preS;
 
-    /* Per-node hover progress */
+    /* Per-node hover progress [0–1] */
     const hovAnim = new Array(9).fill(0);
     let hovIdx = -1;
 
@@ -1448,22 +1450,45 @@
     const allNodes  = [...mainNodes, ...connNodes];
     const edges     = P.E;
 
-    /* Pan bounds — cam center stays within star extent so nothing flies off screen */
+    /* Constellation extents */
     const minFx = Math.min(...mainNodes.map(n => n.fx));
     const maxFx = Math.max(...mainNodes.map(n => n.fx));
     const minFy = Math.min(...mainNodes.map(n => n.fy));
     const maxFy = Math.max(...mainNodes.map(n => n.fy));
+    const ctrFx = (minFx + maxFx) / 2;
+    const ctrFy = (minFy + maxFy) / 2;
+
+    /* Compute scale limits from canvas size + constellation span */
+    function computeLimits() {
+        const pad = 60;
+        MIN_SCALE = Math.max(0.45, Math.min(
+            (W - pad * 2) / ((maxFx - minFx) * W),
+            (H - pad * 2) / ((maxFy - minFy) * H)
+        ) * 0.92);
+        MAX_SCALE = 5.5;
+    }
+
+    /* Pan clamping — no star can go more than ~half-viewport off screen.
+       This keeps the constellation reachable at any zoom level. */
     function clampCam() {
-        cam.tcx = Math.max(minFx, Math.min(maxFx, cam.tcx));
-        cam.tcy = Math.max(minFy, Math.min(maxFy, cam.tcy));
+        const hw = 0.46 / Math.max(0.1, cam.ts);
+        const hh = 0.46 / Math.max(0.1, cam.ts);
+        cam.tcx = Math.max(minFx - hw, Math.min(maxFx + hw, cam.tcx));
+        cam.tcy = Math.max(minFy - hh, Math.min(maxFy + hh, cam.tcy));
+    }
+
+    /* Reset to full-constellation view */
+    function resetView() {
+        cam.tcx = ctrFx; cam.tcy = ctrFy;
+        cam.ts  = MIN_SCALE;
     }
 
     /* Ambient micro-stars */
     const ambient = [];
     function buildAmbient() {
         ambient.length = 0;
-        for (let i = 0; i < 65; i++)
-            ambient.push({ fx:Math.random(), fy:Math.random(), r:Math.random()*.65+.15, op:Math.random()*.11+.04, tw:Math.random()*Math.PI*2 });
+        for (let i = 0; i < 60; i++)
+            ambient.push({ fx:Math.random(), fy:Math.random(), r:Math.random()*.6+.12, op:Math.random()*.10+.03, tw:Math.random()*Math.PI*2 });
     }
     buildAmbient();
 
@@ -1475,58 +1500,68 @@
         canvas.style.top    = top + 'px';
         canvas.style.bottom = '0';
         W = section.clientWidth || window.innerWidth;
-        H = Math.max(440, section.clientHeight - top - 16);
+        H = Math.max(460, section.clientHeight - top - 16);
         canvas.style.height = H + 'px';
         canvas.width  = W;
         canvas.height = H;
+        computeLimits();
+        if (!cameraReady) {
+            resetView();
+            cam.cx = cam.tcx; cam.cy = cam.tcy; cam.scale = cam.ts;
+            cameraReady = true;
+        } else {
+            cam.ts = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.ts));
+            clampCam();
+        }
     }
 
-    /* Coordinate helpers */
-    function toScreen(fx, fy) { return { x: (fx - cam.cx)*cam.scale*W + W/2, y: (fy - cam.cy)*cam.scale*H + H/2 }; }
-    function toFrac(sx, sy)   { return { fx: (sx - W/2)/(cam.scale*W) + cam.cx, fy: (sy - H/2)/(cam.scale*H) + cam.cy }; }
+    /* Coordinate transforms */
+    function toScreen(fx, fy) { return { x: (fx - cam.cx)*cam.scale*W + W/2,  y: (fy - cam.cy)*cam.scale*H + H/2 }; }
+    function toWorld(sx, sy)  { return { fx: (sx - W/2)/(cam.scale*W) + cam.cx, fy: (sy - H/2)/(cam.scale*H) + cam.cy }; }
     function dist2d(ax,ay,bx,by) { return Math.sqrt((ax-bx)**2 + (ay-by)**2); }
 
     /* Hit-test: returns mainNode index or -1 */
     function getHit(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
-        const f    = toFrac(clientX - rect.left, clientY - rect.top);
-        let hit = -1, best = 44 / (cam.scale * Math.min(W, H));
+        const w    = toWorld(clientX - rect.left, clientY - rect.top);
+        const thr  = 52 / (cam.scale * Math.min(W, H));
+        let hit = -1, best = thr;
         mainNodes.forEach((n, i) => {
-            const d = dist2d(f.fx, f.fy, n.fx, n.fy);
+            const d = dist2d(w.fx, w.fy, n.fx, n.fy);
             if (d < best) { best = d; hit = i; }
         });
         return hit;
     }
 
-    /* Zoom to star on click */
+    /* Zoom overlay: click a star */
     function zoomToStar(idx) {
         if (starZoomed) return;
         starZoomed = true; starIdx = idx;
         preCx = cam.tcx; preCy = cam.tcy; preS = cam.ts;
         cam.tcx = mainNodes[idx].fx;
         cam.tcy = mainNodes[idx].fy;
-        cam.ts  = Math.min(4.0, Math.max(cam.scale, .7) * 3.4);
+        cam.ts  = Math.min(MAX_SCALE, Math.max(cam.ts, MIN_SCALE * 1.5) * 2.6);
         oGreek.textContent = mainNodes[idx].greek;
         oEn.textContent    = mainNodes[idx].en;
         oDesc.textContent  = mainNodes[idx].desc;
         setTimeout(() => overlay.classList.add('visible'), 700);
     }
-    function zoomOut() {
+    function zoomBack() {
         starZoomed = false; starIdx = -1;
         overlay.classList.remove('visible');
         cam.tcx = preCx; cam.tcy = preCy; cam.ts = preS;
     }
-    oBack?.addEventListener('click', e => { e.stopPropagation(); zoomOut(); });
+    oBack?.addEventListener('click', e => { e.stopPropagation(); zoomBack(); });
+
+    /* Double-click resets to full constellation view */
+    canvas.addEventListener('dblclick', () => { if (!starZoomed) resetView(); });
 
     /* ── Mouse: drag to pan, click to select ── */
     canvas.addEventListener('mousedown', e => {
         if (starZoomed) return;
-        isDragging  = true;
-        didDrag     = false;
-        dragX       = e.clientX;
-        dragY       = e.clientY;
-        camStartCx  = cam.tcx;
-        camStartCy  = cam.tcy;
+        isDragging = true; didDrag = false;
+        dragX = e.clientX; dragY = e.clientY;
+        camStartCx = cam.tcx; camStartCy = cam.tcy;
         canvas.style.cursor = 'grabbing';
     });
 
@@ -1537,18 +1572,14 @@
             if (didDrag) {
                 cam.tcx = camStartCx - dx / (cam.scale * W);
                 cam.tcy = camStartCy - dy / (cam.scale * H);
-                clampCam();
-                hovIdx = -1;
+                clampCam(); hovIdx = -1;
             }
         } else if (!starZoomed) {
             hovIdx = getHit(e.clientX, e.clientY);
-            const rect = canvas.getBoundingClientRect();
-            const inCanvas = e.clientX >= rect.left && e.clientX <= rect.right &&
-                             e.clientY >= rect.top  && e.clientY <= rect.bottom;
-            if (inCanvas) canvas.style.cursor = hovIdx >= 0 ? 'pointer' : 'grab';
-        } else {
-            hovIdx = -1;
-        }
+            const r = canvas.getBoundingClientRect();
+            if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)
+                canvas.style.cursor = hovIdx >= 0 ? 'pointer' : 'grab';
+        } else { hovIdx = -1; }
     });
 
     window.addEventListener('mouseup', e => {
@@ -1561,39 +1592,68 @@
         canvas.style.cursor = hovIdx >= 0 ? 'pointer' : 'grab';
     });
 
+    /* ── Scroll wheel: zoom toward cursor position ── */
+    canvas.addEventListener('wheel', e => {
+        if (starZoomed) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const wx = (mx - W/2) / (cam.scale * W) + cam.cx;
+        const wy = (my - H/2) / (cam.scale * H) + cam.cy;
+        const factor = e.deltaY < 0 ? 1.13 : 0.885;
+        cam.ts = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.ts * factor));
+        cam.tcx = wx - (mx - W/2) / (cam.ts * W);
+        cam.tcy = wy - (my - H/2) / (cam.ts * H);
+        clampCam();
+    }, { passive: false });
+
     canvas.addEventListener('mouseleave', () => { if (!isDragging) hovIdx = -1; });
 
-    /* ── Touch: drag to pan, tap to select ── */
-    let touchAnchor = null;
+    /* ── Touch: 1-finger pan, 2-finger pinch zoom, tap to select ── */
+    let touchAnchor = null, pinchDist0 = 0, pinchScale0 = 1;
     canvas.addEventListener('touchstart', e => {
-        if (starZoomed || e.touches.length !== 1) return;
+        if (starZoomed) return;
         e.preventDefault();
-        const t = e.touches[0];
-        touchAnchor = { x: t.clientX, y: t.clientY };
-        camStartCx = cam.tcx; camStartCy = cam.tcy;
-        didDrag = false;
+        if (e.touches.length === 1) {
+            const t = e.touches[0];
+            touchAnchor = { x: t.clientX, y: t.clientY };
+            camStartCx = cam.tcx; camStartCy = cam.tcy; didDrag = false;
+        } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            pinchDist0 = Math.sqrt(dx*dx + dy*dy); pinchScale0 = cam.ts;
+        }
     }, { passive: false });
 
     canvas.addEventListener('touchmove', e => {
-        if (!touchAnchor || e.touches.length !== 1) return;
+        if (starZoomed) return;
         e.preventDefault();
-        const t = e.touches[0];
-        const dx = t.clientX - touchAnchor.x, dy = t.clientY - touchAnchor.y;
-        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didDrag = true;
-        if (didDrag) {
-            cam.tcx = camStartCx - dx / (cam.scale * W);
-            cam.tcy = camStartCy - dy / (cam.scale * H);
+        if (e.touches.length === 1 && touchAnchor) {
+            const t = e.touches[0];
+            const dx = t.clientX - touchAnchor.x, dy = t.clientY - touchAnchor.y;
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) didDrag = true;
+            if (didDrag) {
+                cam.tcx = camStartCx - dx / (cam.ts * W);
+                cam.tcy = camStartCy - dy / (cam.ts * H);
+                clampCam();
+            }
+        } else if (e.touches.length === 2 && pinchDist0 > 0) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            cam.ts = Math.max(MIN_SCALE, Math.min(MAX_SCALE, pinchScale0 * Math.sqrt(dx*dx+dy*dy) / pinchDist0));
             clampCam();
         }
     }, { passive: false });
 
     canvas.addEventListener('touchend', e => {
-        if (!didDrag && touchAnchor && !starZoomed) {
-            const t   = e.changedTouches[0];
-            const hit = getHit(t.clientX, t.clientY);
-            if (hit >= 0) zoomToStar(hit);
+        if (e.touches.length === 0) {
+            if (!didDrag && touchAnchor && !starZoomed) {
+                const t = e.changedTouches[0];
+                const hit = getHit(t.clientX, t.clientY);
+                if (hit >= 0) zoomToStar(hit);
+            }
+            touchAnchor = null; pinchDist0 = 0;
         }
-        touchAnchor = null;
     });
 
     /* ── Drawing helpers ── */
@@ -1633,22 +1693,35 @@
 
     function fadeA(t) { return t < .3 ? t/.3 : t > .85 ? (1-t)/.15 : 1; }
 
+    /* Word-wrap text to fit maxWidth, returning array of lines */
+    function wrapText(text, maxWidth) {
+        const words = text.split(' ');
+        const lines = [];
+        let cur = '';
+        for (const w of words) {
+            const test = cur ? cur + ' ' + w : w;
+            if (ctx.measureText(test).width > maxWidth && cur) { lines.push(cur); cur = w; }
+            else cur = test;
+        }
+        if (cur) lines.push(cur);
+        return lines;
+    }
+
     /* ── Render loop ── */
     let fr = 0;
     function draw() {
         requestAnimationFrame(draw);
         fr++;
-        const now = fr * .016, k = .075;
+        const now = fr * .016, k = .08;
 
         cam.scale += (cam.ts  - cam.scale) * k;
         cam.cx    += (cam.tcx - cam.cx)    * k;
         cam.cy    += (cam.tcy - cam.cy)    * k;
 
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < 9; i++)
             hovAnim[i] = i === hovIdx
-                ? Math.min(1, hovAnim[i] + .055)
-                : Math.max(0, hovAnim[i] - .040);
-        }
+                ? Math.min(1, hovAnim[i] + .06)
+                : Math.max(0, hovAnim[i] - .04);
 
         ctx.clearRect(0, 0, W, H);
         ctx.save();
@@ -1659,7 +1732,7 @@
             const p = toScreen(s.fx, s.fy);
             if (p.x < -4 || p.x > W+4 || p.y < -4 || p.y > H+4) continue;
             ctx.beginPath(); ctx.arc(p.x, p.y, s.r, 0, Math.PI*2);
-            ctx.fillStyle = `rgba(201,168,76,${s.op * (0.8 + 0.2*Math.sin(now+s.tw))})`; ctx.fill();
+            ctx.fillStyle = `rgba(201,168,76,${s.op*(0.8+0.2*Math.sin(now+s.tw))})`; ctx.fill();
         }
 
         /* Constellation edges */
@@ -1668,41 +1741,38 @@
             const a = allNodes[i], b = allNodes[j];
             const pa = toScreen(a.fx, a.fy), pb = toScreen(b.fx, b.fy);
             const mi = i < 9 ? i : -1, mj = j < 9 ? j : -1;
-
             ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
-            ctx.strokeStyle = 'rgba(201,168,76,.16)'; ctx.lineWidth = .55; ctx.stroke();
-
-            const ha     = Math.max(mi >= 0 ? hovAnim[mi] : 0, mj >= 0 ? hovAnim[mj] : 0);
-            const sa     = starZoomed && (mi === starIdx || mj === starIdx) ? 1 : 0;
+            ctx.strokeStyle = 'rgba(201,168,76,.18)'; ctx.lineWidth = .6; ctx.stroke();
+            const ha = Math.max(mi >= 0 ? hovAnim[mi] : 0, mj >= 0 ? hovAnim[mj] : 0);
+            const sa = starZoomed && (mi === starIdx || mj === starIdx) ? 1 : 0;
             const bright = Math.max(ha, sa);
             if (bright > 0) {
-                const ex = pa.x + (pb.x - pa.x)*bright, ey = pa.y + (pb.y - pa.y)*bright;
-                ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(ex, ey);
-                ctx.strokeStyle = `rgba(201,168,76,${.55 * bright})`; ctx.lineWidth = 1.0; ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(pa.x, pa.y);
+                ctx.lineTo(pa.x+(pb.x-pa.x)*bright, pa.y+(pb.y-pa.y)*bright);
+                ctx.strokeStyle = `rgba(201,168,76,${.62*bright})`; ctx.lineWidth = 1.1; ctx.stroke();
             }
         }
 
         /* Connector dots */
         for (let i = 9; i < allNodes.length; i++) {
-            const n      = allNodes[i], p = toScreen(n.fx, n.fy);
+            const n = allNodes[i], p = toScreen(n.fx, n.fy);
             const linked = edges.filter(([a,b]) => a === i || b === i);
-            const ha     = linked.length > 0
-                ? Math.max(...linked.map(([a,b]) => Math.max(a<9 ? hovAnim[a] : 0, b<9 ? hovAnim[b] : 0)))
-                : 0;
+            const ha = linked.length > 0
+                ? Math.max(...linked.map(([a,b]) => Math.max(a<9?hovAnim[a]:0, b<9?hovAnim[b]:0))) : 0;
             drawDot(p.x, p.y, ha > 0 ? 2.0 : 1.4, .28 + ha*.40);
         }
 
-        /* Star labels — fade as camera zooms in */
-        const lA = Math.max(0, Math.min(1, (2.4 - cam.scale) / 1.2));
+        /* Star labels — fade out as zoom increases past ~50% */
+        const zr  = (cam.scale - MIN_SCALE) / Math.max(0.01, MAX_SCALE - MIN_SCALE);
+        const lA  = Math.max(0, Math.min(1, 1 - zr * 1.8));
         if (lA > .02) {
             const signs = [[-.6,-1],[.6,-1],[-.6,-1],[.6,1],[.6,-1],[.6,-1],[.6,1],[-.6,1],[.6,1]];
             for (let i = 0; i < 9; i++) {
                 const n = mainNodes[i], p = toScreen(n.fx, n.fy);
                 const [sx, sy] = signs[i];
-                const isA = starZoomed && i === starIdx;
-                const ha  = hovAnim[i];
-                ctx.font      = `${isA || ha > .5 ? 600 : 400} 10px Inter,sans-serif`;
-                ctx.fillStyle = `rgba(201,168,76,${(isA ? .88 : (.35 + ha*.45)) * lA})`;
+                const ha = hovAnim[i];
+                ctx.font      = `${ha > .5 ? 600 : 400} 10px Inter,sans-serif`;
+                ctx.fillStyle = `rgba(201,168,76,${(.36 + ha*.48) * lA})`;
                 ctx.textAlign = sx < 0 ? 'right' : 'left';
                 ctx.fillText(`${n.greek} · ${n.en}`, p.x + sx*22, p.y + sy*22);
             }
@@ -1710,13 +1780,12 @@
 
         /* Stars */
         for (let i = 0; i < 9; i++) {
-            const n       = mainNodes[i], p = toScreen(n.fx, n.fy);
-            const isStar  = starZoomed && i === starIdx;
-            const ha      = hovAnim[i];
-            const pulse   = isStar ? (.84 + .16*Math.sin(now*2.4)) : (1 + ha*.06*Math.sin(now*3+i));
-            const popScale = 1 + ha*.55;
-            const sz      = isStar ? 7.5*pulse : 4.0*popScale*pulse;
-            const op      = isStar ? 1.0 : (.68 + ha*.24);
+            const n      = mainNodes[i], p = toScreen(n.fx, n.fy);
+            const isStar = starZoomed && i === starIdx;
+            const ha     = hovAnim[i];
+            const pulse  = isStar ? (.84+.16*Math.sin(now*2.4)) : (1+ha*.06*Math.sin(now*3+i));
+            const sz     = isStar ? 7.5*pulse : (4.0 + ha*2.2)*pulse;
+            const op     = isStar ? 1.0 : (.68 + ha*.24);
             drawStar(p.x, p.y, sz, op);
             if (isStar) {
                 ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
@@ -1728,45 +1797,67 @@
             }
         }
 
-        /* Hover tooltip — clamped to canvas bounds */
+        /* Hover tooltip — fully word-wrapped, always clamped inside canvas */
         for (let i = 0; i < 9; i++) {
             const ha = hovAnim[i];
-            if (ha < .05 || starZoomed) continue;
-            const n       = mainNodes[i], p = toScreen(n.fx, n.fy);
-            const popScale = 1 + ha*.55;
-            const starR   = 4.0*popScale*3.1 + 8;
-            const bw = 192, bh = 50;
-            let bx = p.x + starR + 4, by = p.y - bh/2;
-            if (bx + bw > W - 4) bx = p.x - starR - bw - 4;
-            if (by < 4)           by = 4;
-            if (by + bh > H - 4)  by = H - bh - 4;
-            ctx.globalAlpha = Math.min(1, (ha - .05)/.5) * fadeA(ha);
+            if (ha < .04 || starZoomed) continue;
+            const n  = mainNodes[i], p = toScreen(n.fx, n.fy);
+            const sz = (4.0 + ha*2.2) * 3.1 + 10;
+            const PAD = 13, bw = 216, bh = 80;
+
+            // Prefer right of star; flip left if it would overflow; clamp both axes
+            let bx = p.x + sz + 6;
+            if (bx + bw > W - 6) bx = p.x - sz - bw - 6;
+            bx = Math.max(6, Math.min(W - bw - 6, bx));
+            let by = p.y - bh / 2;
+            by = Math.max(6, Math.min(H - bh - 6, by));
+
+            const alpha = Math.min(1, (ha - .04)/.42) * fadeA(ha);
+            ctx.globalAlpha = alpha;
+
+            // Background
             ctx.beginPath();
-            if (ctx.roundRect) ctx.roundRect(bx,by,bw,bh,8);
-            else ctx.rect(bx,by,bw,bh);
-            ctx.fillStyle = 'rgba(7,7,14,.90)'; ctx.fill();
-            ctx.strokeStyle = 'rgba(201,168,76,.32)'; ctx.lineWidth = .7; ctx.stroke();
-            ctx.font = '600 11px Inter,sans-serif';
-            ctx.fillStyle = 'rgba(201,168,76,.96)'; ctx.textAlign = 'left';
-            ctx.fillText(n.en, bx+10, by+17);
+            if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 11);
+            else ctx.rect(bx, by, bw, bh);
+            ctx.fillStyle = 'rgba(4,4,11,.94)'; ctx.fill();
+            ctx.strokeStyle = 'rgba(201,168,76,.42)'; ctx.lineWidth = .9; ctx.stroke();
+
+            // Star accent line
+            ctx.fillStyle = 'rgba(201,168,76,.7)';
+            ctx.fillRect(bx + PAD, by + 10, 2, 24);
+
+            // English name
+            ctx.font = '700 12.5px Inter,sans-serif';
+            ctx.fillStyle = 'rgba(201,168,76,1)'; ctx.textAlign = 'left';
+            ctx.fillText(n.en, bx + PAD + 10, by + 22);
+
+            // Greek name
+            ctx.font = 'italic 500 10px "Playfair Display",serif';
+            ctx.fillStyle = 'rgba(201,168,76,.58)';
+            ctx.fillText(n.greek, bx + PAD + 10, by + 36);
+
+            // Description — word-wrapped, max 2 lines
             ctx.font = '400 9px Inter,sans-serif';
-            ctx.fillStyle = 'rgba(255,255,255,.50)';
-            ctx.fillText(n.desc.length > 52 ? n.desc.substring(0,50)+'…' : n.desc, bx+10, by+32);
+            ctx.fillStyle = 'rgba(255,255,255,.54)';
+            const lines = wrapText(n.desc, bw - PAD*2 - 10);
+            lines.slice(0, 2).forEach((ln, li) => ctx.fillText(ln, bx + PAD + 10, by + 53 + li * 13));
+
             ctx.globalAlpha = 1;
         }
 
-        /* Bottom hint */
-        ctx.font      = '400 10px Inter,sans-serif';
-        ctx.fillStyle = 'rgba(201,168,76,.26)'; ctx.textAlign = 'center';
-        ctx.fillText(`${P.name.toUpperCase()}  ·  drag to explore  ·  click a star ✦`, W/2, H-10);
+        /* Bottom hint — context-aware */
+        ctx.font = '400 10px Inter,sans-serif';
+        ctx.fillStyle = 'rgba(201,168,76,.22)'; ctx.textAlign = 'center';
+        const hint = starZoomed
+            ? 'Click ← Back to Stars to continue'
+            : 'scroll to zoom  ·  drag to pan  ·  click a star to explore  ·  double-click to reset';
+        ctx.fillText(`${P.name.toUpperCase()}  ·  ${hint}`, W/2, H - 10);
 
         ctx.restore();
     }
 
     canvas.style.cursor = 'grab';
-    positionCanvas();
-    cam.cx = cam.tcx; cam.cy = cam.tcy; cam.scale = cam.ts;
-    draw();
+    positionCanvas(); draw();
     if (document.fonts?.ready) document.fonts.ready.then(positionCanvas);
     setTimeout(positionCanvas, 400);
     window.addEventListener('resize', () => { positionCanvas(); buildAmbient(); });
@@ -2173,6 +2264,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
