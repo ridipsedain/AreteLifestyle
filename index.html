@@ -343,7 +343,7 @@
         #origin {
             background: #07070E;
             position: relative; text-align: center; overflow: hidden;
-            padding: 130px 6%; min-height: 750px;
+            padding: 130px 6% 80px; min-height: 960px;
         }
         /* Canvas fills the ENTIRE section */
         #greek-canvas {
@@ -1458,8 +1458,12 @@
 
     function resize(){
         W=canvas.width =section.offsetWidth ||900;
-        H=canvas.height=section.offsetHeight||750;
-        if(!starZoomed){cam.tcx=.5;cam.tcy=.5;cam.ts=1.0;}
+        H=canvas.height=section.offsetHeight||960;
+        if(!starZoomed){
+            cam.tcx=.5; cam.tcy=.5;
+            // Start slightly zoomed out so the full pattern fills the canvas beautifully
+            cam.ts = Math.min(W/520, H/520) * 0.78;
+        }
     }
     function toScreen(fx,fy){return{x:(fx-cam.cx)*cam.scale*W+W/2,y:(fy-cam.cy)*cam.scale*H+H/2};}
     function toFrac(sx,sy){return{fx:(sx-W/2)/(cam.scale*W)+cam.cx,fy:(sy-H/2)/(cam.scale*H)+cam.cy};}
@@ -1616,8 +1620,8 @@
             }
         }
 
-        if(!starZoomed&&cam.scale<1.25){
-            const a=Math.min(1,(1.25-cam.scale)/.4);
+        if(!starZoomed&&cam.scale<0.95){
+            const a=Math.min(1,(0.95-cam.scale)/0.3);
             ctx.font='400 11px Inter,sans-serif';ctx.fillStyle=`rgba(201,168,76,${.40*a})`;
             ctx.textAlign='center';
             ctx.fillText(`${P.name.toUpperCase()}  ·  drag to explore  ·  click a star ✦`,W/2,H-14);
