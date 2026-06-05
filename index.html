@@ -345,7 +345,7 @@
             position: relative; text-align: center; overflow: hidden;
             padding: 130px 6%;
         }
-        #greek-canvas { display: block; width: 100%; height: 320px; position: relative; z-index: 1; cursor: default; pointer-events: auto; }
+        #greek-canvas { display: block; width: 100%; height: 420px; position: relative; z-index: 1; cursor: default; pointer-events: auto; }
         #origin .s-inner { position: relative; z-index: 1; }
         #origin .s-label { color: var(--gold); }
         .origin-eyebrow {
@@ -1383,12 +1383,33 @@
     let W, H, active = 0;
     const ripples = [];
 
-    // 3 main star nodes (fractional positions — triangle formation)
+    // All nodes: indices 0-2 are the 3 main interactive stars,
+    // indices 3-10 are smaller connector nodes for an organic shape
     const nodes = [
-        { fx: 0.50, fy: 0.22 },  // Excellence — top center
-        { fx: 0.20, fy: 0.78 },  // Flourishing — bottom left
-        { fx: 0.80, fy: 0.78 },  // Wisdom — bottom right
+        // ── Main interactive nodes ──
+        { fx: 0.14, fy: 0.44, main: true  },  // 0  Excellence  — left-mid
+        { fx: 0.74, fy: 0.24, main: true  },  // 1  Flourishing — right-upper
+        { fx: 0.52, fy: 0.80, main: true  },  // 2  Wisdom      — center-lower
+        // ── Connector nodes ──
+        { fx: 0.36, fy: 0.12, main: false },  // 3  top-left arc
+        { fx: 0.62, fy: 0.38, main: false },  // 4  center
+        { fx: 0.26, fy: 0.70, main: false },  // 5  left-lower
+        { fx: 0.88, fy: 0.52, main: false },  // 6  right-mid
+        { fx: 0.05, fy: 0.86, main: false },  // 7  far bottom-left
+        { fx: 0.40, fy: 0.93, main: false },  // 8  bottom-center
+        { fx: 0.76, fy: 0.88, main: false },  // 9  bottom-right
+        { fx: 0.93, fy: 0.16, main: false },  // 10 far top-right
     ];
+
+    // Hand-crafted organic connections — NOT a polygon
+    const edges = [
+        [0, 3], [3, 1], [1, 10], [10, 6], [1, 4],
+        [0, 4], [4, 2], [4, 6],  [1, 6],
+        [0, 5], [2, 5], [5, 7],  [7, 8],
+        [2, 8], [8, 9], [9, 6],  [2, 9],
+        [3, 4],
+    ];
+
     const nodeLabels = ['ἀρετή · Excellence', 'εὐδαιμονία · Flourishing', 'φρόνησις · Wisdom'];
 
     // Ambient background stars
@@ -1469,20 +1490,21 @@
         ctx.clearRect(0, 0, W, H);
         const now = frame * 0.016;
 
-        // Connecting lines between nodes
-        for (let i = 0; i < nodes.length; i++) {
-            for (let j = i + 1; j < nodes.length; j++) {
-                const a = pos(nodes[i]), b = pos(nodes[j]);
-                const lit = i === active || j === active;
-                ctx.beginPath();
-                ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-                ctx.strokeStyle = lit ? 'rgba(201,168,76,0.4)' : 'rgba(201,168,76,0.12)';
-                ctx.lineWidth = lit ? 1.2 : 0.6;
-                ctx.stroke();
-            }
+        // ── Edges (organic hand-crafted connections) ──
+        for (const [i, j] of edges) {
+            const a = pos(nodes[i]), b = pos(nodes[j]);
+            // Light up edges touching the active main node
+            const touchesActive = (i < 3 && i === active) || (j < 3 && j === active);
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+            ctx.strokeStyle = touchesActive
+                ? 'rgba(201,168,76,0.45)'
+                : 'rgba(201,168,76,0.13)';
+            ctx.lineWidth = touchesActive ? 1.1 : 0.6;
+            ctx.stroke();
         }
 
-        // Ambient stars
+        // ── Ambient background stars ──
         for (const s of ambient) {
             const tw = 0.8 + 0.2 * Math.sin(now + s.tw);
             ctx.beginPath();
@@ -1491,56 +1513,81 @@
             ctx.fill();
         }
 
-        // Ripples
+        // ── Ripples ──
         for (let i = ripples.length - 1; i >= 0; i--) {
             const rp = ripples[i];
-            rp.r  += 3; rp.op -= 0.018;
+            rp.r += 3.2; rp.op -= 0.016;
             if (rp.op <= 0) { ripples.splice(i, 1); continue; }
             ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(201,168,76,${rp.op})`; ctx.lineWidth = 1.5; ctx.stroke();
-            // Second ring slightly behind
-            if (rp.r > 15) {
-                ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r - 12, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(201,168,76,${rp.op * 0.4})`; ctx.lineWidth = 0.8; ctx.stroke();
+            if (rp.r > 18) {
+                ctx.beginPath(); ctx.arc(rp.x, rp.y, rp.r - 14, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(201,168,76,${rp.op * 0.35})`; ctx.lineWidth = 0.7; ctx.stroke();
             }
         }
 
-        // Main star nodes
-        nodes.forEach((n, i) => {
-            const p = pos(n);
+        // ── Connector (secondary) nodes ──
+        for (let i = 3; i < nodes.length; i++) {
+            const p = pos(nodes[i]);
+            // Check if this node touches the active main node via an edge
+            const lit = edges.some(([a, b]) => (a === i || b === i) && (a === active || b === active));
+            const r = lit ? 3.2 : 2.0;
+            // Small glow
+            if (lit) {
+                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 10);
+                grd.addColorStop(0, 'rgba(201,168,76,0.25)');
+                grd.addColorStop(1, 'rgba(201,168,76,0)');
+                ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = grd; ctx.fill();
+            }
+            drawSparkle(p.x, p.y, r, lit ? 'rgba(215,172,65,0.75)' : 'rgba(201,168,76,0.30)');
+            ctx.beginPath(); ctx.arc(p.x, p.y, lit ? 1.4 : 0.9, 0, Math.PI * 2);
+            ctx.fillStyle = lit ? 'rgba(255,230,130,0.9)' : 'rgba(220,180,80,0.5)'; ctx.fill();
+        }
+
+        // ── Main interactive star nodes ──
+        for (let i = 0; i < 3; i++) {
+            const n = nodes[i], p = pos(n);
             const isActive = i === active;
             const pulse = isActive ? (0.88 + 0.12 * Math.sin(now * 2.2)) : 1;
 
-            // Outer glow (active only)
+            // Outer glow
             if (isActive) {
-                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 52 * pulse);
-                grd.addColorStop(0,   `rgba(201,168,76,0.28)`);
-                grd.addColorStop(0.45,`rgba(201,168,76,0.07)`);
-                grd.addColorStop(1,   `rgba(201,168,76,0)`);
-                ctx.beginPath(); ctx.arc(p.x, p.y, 52 * pulse, 0, Math.PI * 2);
+                const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 58 * pulse);
+                grd.addColorStop(0,    'rgba(201,168,76,0.30)');
+                grd.addColorStop(0.42, 'rgba(201,168,76,0.08)');
+                grd.addColorStop(1,    'rgba(201,168,76,0)');
+                ctx.beginPath(); ctx.arc(p.x, p.y, 58 * pulse, 0, Math.PI * 2);
                 ctx.fillStyle = grd; ctx.fill();
             }
 
-            // Ring
-            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 20 : 13, 0, Math.PI * 2);
-            ctx.strokeStyle = isActive ? `rgba(201,168,76,0.85)` : `rgba(201,168,76,0.28)`;
-            ctx.lineWidth = isActive ? 1.5 : 0.8; ctx.stroke();
+            // Outer ring
+            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 22 : 14, 0, Math.PI * 2);
+            ctx.strokeStyle = isActive ? 'rgba(201,168,76,0.88)' : 'rgba(201,168,76,0.30)';
+            ctx.lineWidth = isActive ? 1.5 : 0.9; ctx.stroke();
+
+            // Inner halo (active only)
+            if (isActive) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 30 * pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(201,168,76,0.12)'; ctx.lineWidth = 0.6; ctx.stroke();
+            }
 
             // Sparkle
-            const sr = isActive ? 6.5 * pulse : 3.8;
-            drawSparkle(p.x, p.y, sr, isActive ? `rgba(230,185,75,0.95)` : `rgba(201,168,76,0.45)`);
+            const sr = isActive ? 7 * pulse : 4.2;
+            drawSparkle(p.x, p.y, sr, isActive ? 'rgba(235,190,80,0.97)' : 'rgba(201,168,76,0.50)');
 
-            // Core dot
-            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 3.2 * pulse : 1.8, 0, Math.PI * 2);
-            ctx.fillStyle = isActive ? `rgba(255,240,160,1)` : `rgba(230,185,75,0.6)`; ctx.fill();
+            // Core
+            ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 3.4 * pulse : 2.0, 0, Math.PI * 2);
+            ctx.fillStyle = isActive ? 'rgba(255,242,165,1)' : 'rgba(230,185,75,0.65)'; ctx.fill();
 
-            // Label
-            ctx.font = isActive ? `600 11px Inter, sans-serif` : `400 10px Inter, sans-serif`;
-            ctx.fillStyle = isActive ? `rgba(201,168,76,0.95)` : `rgba(201,168,76,0.38)`;
-            ctx.textAlign = 'center';
-            const labelY = i === 0 ? p.y - 30 : p.y + 32;
-            ctx.fillText(nodeLabels[i], p.x, labelY);
-        });
+            // Label — position so it doesn't overlap edges
+            const labelOffsets = [{ dx: -14, dy: -32 }, { dx: 10, dy: -32 }, { dx: 10, dy: 32 }];
+            const lo = labelOffsets[i];
+            ctx.font = isActive ? '600 11px Inter,sans-serif' : '400 10px Inter,sans-serif';
+            ctx.fillStyle = isActive ? 'rgba(201,168,76,0.95)' : 'rgba(201,168,76,0.40)';
+            ctx.textAlign = i === 0 ? 'right' : 'left';
+            ctx.fillText(nodeLabels[i], p.x + lo.dx, p.y + lo.dy);
+        }
     }
 
     // Nav buttons
@@ -1955,6 +2002,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
