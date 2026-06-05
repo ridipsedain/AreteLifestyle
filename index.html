@@ -184,12 +184,101 @@
         #problem .s-title { color: #fff; }
         #problem .s-sub { color: rgba(255,255,255,.45); }
         #problem .s-label { color: var(--gold); }
-        .prob-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 22px; margin-top: 60px; }
-        .prob-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: var(--r); padding: 36px; transition: all .35s ease; }
-        .prob-card:hover { background: rgba(201,168,76,.07); border-color: rgba(201,168,76,.22); transform: translateY(-5px); }
-        .prob-emoji { font-size: 34px; margin-bottom: 22px; }
-        .prob-card h3 { font-family: 'Playfair Display', serif; font-size: 19px; color: #fff; margin-bottom: 12px; line-height: 1.35; }
-        .prob-card p { font-size: 15px; color: rgba(255,255,255,.42); line-height: 1.65; }
+
+        /* ── PROBLEM INTERACTIVE ── */
+        .prob-interactive { margin-top: 64px; }
+        .prob-nodes-row {
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px 0;
+        }
+        .prob-node-connector {
+            flex: 1; max-width: 220px; height: 1px;
+            background: rgba(201,168,76,.18); position: relative; overflow: visible;
+        }
+        .prob-node-connector::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(201,168,76,.7), transparent);
+            opacity: 0; transition: opacity .5s ease;
+        }
+        .prob-node-connector.lit::after { opacity: 1; }
+        .prob-node {
+            display: flex; flex-direction: column; align-items: center; gap: 12px;
+            background: none; border: none; cursor: pointer; padding: 12px 24px;
+            position: relative;
+        }
+        .prob-node-ring {
+            width: 58px; height: 58px; border-radius: 50%;
+            border: 1px solid rgba(201,168,76,.2);
+            display: flex; align-items: center; justify-content: center;
+            transition: all .4s ease; position: relative;
+        }
+        .prob-node-ring::before {
+            content: ''; position: absolute; inset: -6px; border-radius: 50%;
+            border: 1px solid rgba(201,168,76,0); transition: all .4s ease;
+        }
+        .prob-node.active .prob-node-ring {
+            border-color: rgba(201,168,76,.75);
+            box-shadow: 0 0 22px rgba(201,168,76,.35), 0 0 44px rgba(201,168,76,.12);
+        }
+        .prob-node.active .prob-node-ring::before { border-color: rgba(201,168,76,.22); }
+        .prob-node:hover .prob-node-ring { border-color: rgba(201,168,76,.45); }
+        .prob-node-icon {
+            font-size: 24px; color: rgba(201,168,76,.3);
+            transition: all .4s ease; line-height: 1;
+        }
+        .prob-node.active .prob-node-icon {
+            color: var(--gold);
+            filter: drop-shadow(0 0 7px rgba(201,168,76,.9)) drop-shadow(0 0 18px rgba(201,168,76,.4));
+        }
+        .prob-node:hover .prob-node-icon { color: rgba(201,168,76,.65); }
+        .prob-node-num {
+            font-size: 10px; letter-spacing: 2.5px; font-weight: 600;
+            font-family: 'Inter', sans-serif; color: rgba(255,255,255,.18);
+            transition: color .3s ease;
+        }
+        .prob-node.active .prob-node-num { color: var(--gold-dark); }
+
+        /* Content panel */
+        .prob-panel { margin-top: 60px; position: relative; min-height: 240px; text-align: center; }
+        .prob-item {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center;
+            opacity: 0; transform: translateY(20px) scale(.98);
+            transition: opacity .55s ease, transform .55s ease;
+            pointer-events: none;
+        }
+        .prob-item.active {
+            opacity: 1; transform: translateY(0) scale(1);
+            position: relative; pointer-events: all;
+        }
+        .prob-emoji { font-size: 46px; margin-bottom: 24px; display: block; }
+        #problem .prob-item h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(20px, 2.4vw, 28px); color: #fff;
+            margin-bottom: 16px; line-height: 1.38; max-width: 620px;
+        }
+        #problem .prob-item p {
+            font-size: 16px; color: rgba(255,255,255,.46);
+            line-height: 1.75; max-width: 500px;
+        }
+
+        /* Nav */
+        .prob-nav { display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: 52px; }
+        .prob-btn {
+            width: 48px; height: 48px; border-radius: 50%; cursor: pointer;
+            background: rgba(255,255,255,.04); border: 1px solid rgba(201,168,76,.25);
+            color: var(--gold); font-size: 22px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all .22s ease; font-family: 'Inter', sans-serif;
+        }
+        .prob-btn:hover { background: rgba(201,168,76,.12); border-color: var(--gold); transform: scale(1.1); }
+        .prob-dots { display: flex; gap: 10px; align-items: center; }
+        .prob-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: rgba(255,255,255,.18); cursor: pointer;
+            transition: all .3s ease;
+        }
+        .prob-dot.active { background: var(--gold); transform: scale(1.6); box-shadow: 0 0 8px rgba(201,168,76,.6); }
 
         /* ── HOW IT WORKS ── */
         #how { background: rgba(250,250,248,0.84); }
@@ -761,21 +850,48 @@
         <span class="s-label">The Problem</span>
         <h2 class="s-title">Sound familiar?</h2>
         <p class="s-sub">You've tried. You want to get better. The apps just don't work. Here's why.</p>
-        <div class="prob-grid">
-            <div class="prob-card rv">
-                <div class="prob-emoji">📱</div>
-                <h3>"I've downloaded 6 self-improvement apps this year."</h3>
-                <p>They all felt the same after day 3. Generic reminders. Generic advice. Nothing that actually knew you.</p>
+        <div class="prob-interactive">
+            <div class="prob-nodes-row">
+                <button class="prob-node active" data-idx="0">
+                    <div class="prob-node-ring"><span class="prob-node-icon">✦</span></div>
+                    <span class="prob-node-num">01</span>
+                </button>
+                <div class="prob-node-connector lit"></div>
+                <button class="prob-node" data-idx="1">
+                    <div class="prob-node-ring"><span class="prob-node-icon">✦</span></div>
+                    <span class="prob-node-num">02</span>
+                </button>
+                <div class="prob-node-connector"></div>
+                <button class="prob-node" data-idx="2">
+                    <div class="prob-node-ring"><span class="prob-node-icon">✦</span></div>
+                    <span class="prob-node-num">03</span>
+                </button>
             </div>
-            <div class="prob-card rv d1">
-                <div class="prob-emoji">⚡</div>
-                <h3>"I know what I should do. I just can't stay consistent."</h3>
-                <p>Motivation runs out. Accountability needs to be specific. Not a notification that says "Time to check in!"</p>
-            </div>
-            <div class="prob-card rv d2">
-                <div class="prob-emoji">📋</div>
-                <h3>"Every app gives me the same generic plan."</h3>
-                <p>5am wake-ups. Cold showers. None of them know your actual patterns, your schedule, or what moves the needle for you.</p>
+            <div class="prob-panel">
+                <div class="prob-item active" data-idx="0">
+                    <span class="prob-emoji">📱</span>
+                    <h3>"I've downloaded 6 self-improvement apps this year."</h3>
+                    <p>They all felt the same after day 3. Generic reminders. Generic advice. Nothing that actually knew you.</p>
+                </div>
+                <div class="prob-item" data-idx="1">
+                    <span class="prob-emoji">⚡</span>
+                    <h3>"I know what I should do. I just can't stay consistent."</h3>
+                    <p>Motivation runs out. Accountability needs to be specific. Not a notification that says "Time to check in!"</p>
+                </div>
+                <div class="prob-item" data-idx="2">
+                    <span class="prob-emoji">📋</span>
+                    <h3>"Every app gives me the same generic plan."</h3>
+                    <p>5am wake-ups. Cold showers. None of them know your actual patterns, your schedule, or what moves the needle for you.</p>
+                </div>
+                <div class="prob-nav">
+                    <button class="prob-btn prob-prev" aria-label="Previous">‹</button>
+                    <div class="prob-dots">
+                        <span class="prob-dot active" data-idx="0"></span>
+                        <span class="prob-dot" data-idx="1"></span>
+                        <span class="prob-dot" data-idx="2"></span>
+                    </div>
+                    <button class="prob-btn prob-next" aria-label="Next">›</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1316,6 +1432,44 @@
 })();
 
 
+// ── PROBLEM INTERACTIVE ───────────────────────────────────────────────
+(function () {
+    let current = 0;
+    const total      = 3;
+    const nodes      = document.querySelectorAll('.prob-node');
+    const items      = document.querySelectorAll('.prob-item');
+    const dots       = document.querySelectorAll('.prob-dot');
+    const connectors = document.querySelectorAll('.prob-node-connector');
+
+    function goTo(idx) {
+        const next = ((idx % total) + total) % total;
+        if (next === current) return;
+
+        // Deactivate current
+        items[current].classList.remove('active');
+        nodes[current].classList.remove('active');
+        dots[current].classList.remove('active');
+
+        current = next;
+
+        // Light up connectors up to active index
+        connectors.forEach((c, i) => c.classList.toggle('lit', i < current));
+
+        // Small stagger so content fades in just after node lights up
+        setTimeout(() => {
+            items[current].classList.add('active');
+        }, 80);
+        nodes[current].classList.add('active');
+        dots[current].classList.add('active');
+    }
+
+    nodes.forEach(n => n.addEventListener('click', () => goTo(+n.dataset.idx)));
+    dots.forEach(d  => d.addEventListener('click',  () => goTo(+d.dataset.idx)));
+    document.querySelector('.prob-next').addEventListener('click', () => goTo(current + 1));
+    document.querySelector('.prob-prev').addEventListener('click', () => goTo(current - 1));
+})();
+
+
 // ── SCROLL REVEAL ─────────────────────────────────────────────────────
 const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
@@ -1678,6 +1832,7 @@ window.addEventListener('scroll', () => {
 </script>
 </body>
 </html>
+
 
 
 
