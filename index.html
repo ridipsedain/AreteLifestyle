@@ -830,7 +830,7 @@
                     <p class="ref-pos">You're <strong>#<span class="ref-num">847</span></strong> on the waitlist. Each referral moves you up <strong>50 spots</strong>.</p>
                     <div class="ref-progress-wrap">
                         <div class="ref-progress-label">
-                            <span>0 referrals</span>
+                            <span id="hero-ref-count">0 referrals</span>
                             <span>3 to unlock 1 day of Pro →</span>
                         </div>
                         <div class="ref-progress-track">
@@ -1209,7 +1209,7 @@
                     <p class="ref-pos">You're <strong>#<span class="ref-num">847</span></strong> on the waitlist. Each referral moves you up <strong>50 spots</strong>.</p>
                     <div class="ref-progress-wrap">
                         <div class="ref-progress-label">
-                            <span>0 referrals</span>
+                            <span id="cta-ref-count">0 referrals</span>
                             <span>3 to unlock 1 day of Pro →</span>
                         </div>
                         <div class="ref-progress-track">
@@ -2653,22 +2653,42 @@ function showError(inputId, errorId, msg) {
 
 
 // ── FORMS ─────────────────────────────────────────────────────────────
-// Paste your Google Apps Script deployment URL below:
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw3VIF-R0WGYaXvvpl5Eihn2YyiiqkNUTXeZg54hs2eni_-9lL5pUiv6OP0VuDoDN2V/exec';
 
-// Read referral code from URL if someone arrived via a referral link
 const REFERRED_BY = new URLSearchParams(window.location.search).get('ref') || '';
-
-function submitToSheet(email, refCode, source) {
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.startsWith('PASTE')) return;
-    const params = new URLSearchParams({ email, refCode, source, referredBy: REFERRED_BY });
-    fetch(APPS_SCRIPT_URL + '?' + params.toString())
-        .then(r => r.text()).then(t => console.log('Sheet sync OK:', t))
-        .catch(err => console.warn('Sheet sync failed:', err));
-}
 
 function genCode() {
     return Math.random().toString(36).substr(2,6).toUpperCase();
+}
+
+function submitToSheet(email, refCode, source) {
+    if (!APPS_SCRIPT_URL) return;
+    const params = new URLSearchParams({ email, refCode, source, referredBy: REFERRED_BY });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString())
+        .then(r => r.json())
+        .then(() => refreshRefCount(refCode))
+        .catch(() => {});
+}
+
+function fetchReferralCount(refCode, cb) {
+    const params = new URLSearchParams({ action: 'getCount', refCode });
+    fetch(APPS_SCRIPT_URL + '?' + params.toString())
+        .then(r => r.json())
+        .then(d => { if (typeof d.referralCount === 'number') cb(d.referralCount); })
+        .catch(() => {});
+}
+
+function refreshRefCount(refCode) {
+    fetchReferralCount(refCode, count => {
+        localStorage.setItem('arete_ref_count', count);
+        const label = count + ' referral' + (count !== 1 ? 's' : '');
+        const h = document.getElementById('hero-ref-count');
+        const c = document.getElementById('cta-ref-count');
+        if (h) h.textContent = label;
+        if (c) c.textContent  = label;
+        const pct = Math.max(Math.min((count / 30) * 100, 100), count > 0 ? 4 : 0);
+        document.querySelectorAll('.ref-progress-fill').forEach(el => { el.style.width = pct + '%'; });
+    });
 }
 
 function bindForm(fId, iId, sId, errId, refPanelId, linkInputId, fillId, twId, waId, source) {
@@ -2677,17 +2697,38 @@ function bindForm(fId, iId, sId, errId, refPanelId, linkInputId, fillId, twId, w
         const email = document.getElementById(iId).value.trim();
         const error = validateEmail(email);
         if (error) { showError(iId, errId, error); return; }
-        const refCode = genCode();
+        let refCode = localStorage.getItem('arete_ref_code');
+        if (!refCode) {
+            refCode = genCode();
+            localStorage.setItem('arete_ref_code', refCode);
+            localStorage.setItem('arete_email', email);
+        }
         submitToSheet(email, refCode, source);
         document.getElementById(fId).style.display = 'none';
         document.getElementById(errId).classList.remove('show');
         document.getElementById(sId).classList.add('show');
-        showReferral(refPanelId, linkInputId, fillId, twId, waId, refCode);
+        const savedCount = parseInt(localStorage.getItem('arete_ref_count') || '0', 10);
+        showReferral(refPanelId, linkInputId, fillId, twId, waId, refCode, savedCount);
     });
 }
 
 bindForm('hero-form','hero-email','hero-success','hero-error','hero-ref','hero-ref-link','hero-fill','hero-tw','hero-wa','hero');
 bindForm('cta-form', 'cta-email', 'cta-success', 'cta-error', 'cta-ref', 'cta-ref-link', 'cta-fill', 'cta-tw', 'cta-wa', 'cta');
+
+// Restore referral panel for returning visitors who already signed up
+(function restoreReturningUser() {
+    const refCode = localStorage.getItem('arete_ref_code');
+    if (!refCode) return;
+    const savedCount = parseInt(localStorage.getItem('arete_ref_count') || '0', 10);
+    ['hero', 'cta'].forEach(prefix => {
+        const form = document.getElementById(prefix + '-form');
+        if (form) form.style.display = 'none';
+        const suc = document.getElementById(prefix + '-success');
+        if (suc) suc.classList.add('show');
+        showReferral(prefix + '-ref', prefix + '-ref-link', prefix + '-fill', prefix + '-tw', prefix + '-wa', refCode, savedCount);
+    });
+    refreshRefCount(refCode);
+})();
 
 
 // ── PRICING TOGGLE ────────────────────────────────────────────────────
@@ -2711,20 +2752,16 @@ function scrollToCTA() { document.getElementById('cta').scrollIntoView({ behavio
 
 
 // ── REFERRAL ──────────────────────────────────────────────────────────
-function genCode() {
-    return Math.random().toString(36).substr(2,6).toUpperCase();
-}
-
 function buildShareLinks(code, twId, waId) {
-    const url = encodeURIComponent('https://aretelifestyle.org/join?ref=' + code);
-    const msg = encodeURIComponent('I just joined the Arete waitlist - an AI coach that actually knows you. Use my link to join: https://aretelifestyle.org/join?ref=' + code);
+    const base = window.location.origin + '/?ref=' + code;
+    const msg = encodeURIComponent('I just joined the Arete waitlist - an AI coach that actually knows you. Use my link to join: ' + base);
     document.getElementById(twId).href = 'https://twitter.com/intent/tweet?text=' + msg;
     document.getElementById(waId).href = 'https://wa.me/?text=' + msg;
 }
 
-function showReferral(refPanelId, linkInputId, fillId, twId, waId, code) {
+function showReferral(refPanelId, linkInputId, fillId, twId, waId, code, count) {
     const pos = Math.floor(Math.random() * 200) + 750;
-    const refLink = 'aretelifestyle.org/join?ref=' + code;
+    const refLink = window.location.origin + '/?ref=' + code;
 
     const panel = document.getElementById(refPanelId);
     panel.querySelectorAll('.ref-num').forEach(el => el.textContent = pos);
@@ -2732,8 +2769,10 @@ function showReferral(refPanelId, linkInputId, fillId, twId, waId, code) {
     buildShareLinks(code, twId, waId);
     panel.classList.add('show');
 
+    const n = count || 0;
+    const pct = Math.max(Math.min((n / 30) * 100, 100), n > 0 ? 4 : 0);
     setTimeout(() => {
-        document.getElementById(fillId).style.width = '4%';
+        document.getElementById(fillId).style.width = pct + '%';
     }, 400);
 }
 
